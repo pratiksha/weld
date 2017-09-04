@@ -50,6 +50,35 @@ pub enum Type {
     Function(Vec<Type>, Box<Type>),
 }
 
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let rep: String = match *self {
+            Type::Scalar(sk) => {
+                format!("Scalar({})", sk)
+            },
+            Type::Simd(sk) => {
+                format!("Simd({})", sk)
+            },
+            Type::Vector(ref ty) => {
+                format!("Vector({})", *ty)
+            }
+            Type::Dict(ref ty1, ref ty2) => {
+                format!("Dict({}, {})", *ty1, *ty2)
+            }
+            Type::Builder(ref bk, _) => {
+                format!("Builder({})", bk)
+            }
+            Type::Struct(ref ty_vec) => {
+                format!("Struct({:?})", ty_vec)
+            }
+            Type::Function(ref ty_vec, ref ty) => {
+                format!("Function({:?}, {})", ty_vec, *ty)
+            }
+        };
+        write!(f, "{}", rep)
+    }
+}
+
 impl Type {
     /// Return true if a given type is SIMD vectorized, which concretely means that it is
     /// either a simd[T], a builder, or a struct of SIMD types.
@@ -384,6 +413,29 @@ pub enum BuilderKind {
     VecMerger(Box<Type>, BinOpKind),
 }
 
+impl fmt::Display for BuilderKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let rep: String = match *self {
+            BuilderKind::Appender(ref ty) => {
+                format!("Appender({})", *ty)
+            },
+            BuilderKind::Merger(ref ty, ref bk) => {
+                format!("Merger({}, {})", *ty, bk)
+            },
+            BuilderKind::DictMerger(ref ty1, ref ty2, ref bk) => {
+                format!("DictMerger({}, {}, {})", *ty1, *ty2, bk)
+            },
+            BuilderKind::GroupMerger(ref ty1, ref ty2) => {
+                format!("GroupMerger({}, {})", *ty1, *ty2)
+            },
+            BuilderKind::VecMerger(ref ty1, ref bk) => {
+                format!("VecMerger({}, {})", *ty1, bk)
+            }
+        };
+        write!(f, "{}", rep)
+    }
+}
+
 pub trait TypeBounds: Clone + PartialEq {}
 
 impl TypeBounds for Type {}
@@ -612,6 +664,12 @@ impl fmt::Display for UnaryOpKind {
 pub struct Parameter<T: TypeBounds> {
     pub name: Symbol,
     pub ty: T,
+}
+
+impl fmt::Display for Parameter<Type> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {}", self.name, self.ty)
+    }
 }
 
 /// A typed expression struct.
