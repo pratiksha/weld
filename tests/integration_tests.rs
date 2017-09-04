@@ -2162,7 +2162,7 @@ fn main() {
     let mut passed = 0;
     for t in tests.iter() {
         if args.len() > 1 {
-            if !args[1].contains(t.0) {
+            if !(args[1]).contains(t.0) {
                 println!("{} ... \x1b[0;33mignored\x1b[0m", t.0);
                 continue;
             }

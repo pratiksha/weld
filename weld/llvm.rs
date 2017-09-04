@@ -28,6 +28,8 @@ use super::util::LIB_WELD_RT;
 
 #[cfg(test)]
 use super::parser::*;
+#[cfg(test)]
+use super::test_utils::*;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 
@@ -2708,11 +2710,7 @@ fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> HashMap<S
 }
 
 #[cfg(test)]
-fn predicate_only(code: &str) -> WeldResult<TypedExpr> {
-    let mut e = parse_expr(code).unwrap();
-    assert!(type_inference::infer_types(&mut e).is_ok());
-    let mut typed_e = e.to_typed().unwrap();
-    
+fn predicate_only(mut typed_e: &mut TypedExpr) -> WeldResult<&mut TypedExpr> {
     let optstr = ["predicate"];
     let optpass = optstr.iter().map(|x| (*OPTIMIZATION_PASSES.get(x).unwrap()).clone()).collect();
 
@@ -2726,27 +2724,24 @@ fn predicate_iff_annotated() {
     /* Ensure predication is only applied if annotation is present. */
 
     /* annotation true */
-    let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))";
-    let typed_e = predicate_only(code);
-    assert!(typed_e.is_ok());
+    let mut typed_e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
+    let opt_e = predicate_only(&mut typed_e);
     let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|merge(b:merger[i32,+],select((e:i32>0),e:i32,0))))";
-    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
+    assert_eq!(print_typed_expr_without_indent(&opt_e.unwrap()).as_str(),
                expected);
 
     /* annotation false */
-    let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:false)if(e>0, merge(b,e), b)))";
-    let typed_e = predicate_only(code);
-    assert!(typed_e.is_ok());
+    let mut typed_e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:false)if(e>0, merge(b,e), b)))");
+    let opt_e = predicate_only(&mut typed_e);
     let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|@(predicate:false)if((e:i32>0),merge(b:merger[i32,+],e:i32),b:merger[i32,+])))";
-    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
+    assert_eq!(print_typed_expr_without_indent(&opt_e.unwrap()).as_str(),
                expected);
 
     /* annotation missing */
-    let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))";
-    let typed_e = predicate_only(code);
-    assert!(typed_e.is_ok());
+    let mut typed_e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
+    let opt_e = predicate_only(&mut typed_e);
     let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|if((e:i32>0),merge(b:merger[i32,+],e:i32),b:merger[i32,+])))";
-    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
+    assert_eq!(print_typed_expr_without_indent(&opt_e.unwrap()).as_str(),
                expected);
 }
 

@@ -17,6 +17,8 @@ use super::util::SymbolGenerator;
 use super::parser::*;
 #[cfg(test)]
 use super::type_inference::*;
+#[cfg(test)]
+use super::test_utils::*;
 
 /// Returns `true` if this is a set of iterators we can vectorize, `false` otherwise.
 /// 
@@ -348,14 +350,6 @@ pub fn vectorize(expr: &mut Expr<Type>) {
         // Check other expressions.
         Ok((None, true))
     });
-}
-
-/// Parse and perform type inference on an expression.
-#[cfg(test)]
-fn typed_expr(code: &str) -> TypedExpr {
-    let mut e = parse_expr(code).unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    e.to_typed().unwrap()
 }
 
 /// Check whether a function has a vectorized Merge call. We'll use this to check whether function

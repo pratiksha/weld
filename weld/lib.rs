@@ -50,6 +50,8 @@ pub mod exprs;
 
 // TODO not the right place for this.
 pub mod vectorizer;
+pub mod cost;
+pub mod test_utils;
 
 pub mod easy_ll;
 
@@ -214,7 +216,9 @@ pub unsafe extern "C" fn weld_value_memory_usage(obj: *mut WeldValue) -> libc::i
     let value = &mut *obj;
     if let Some(run_id) = value.run_id {
         let module = &mut *value.module.unwrap();
-        return module.run_named("run_memory_usage", run_id).unwrap_or(-1) as libc::int64_t;
+        return module
+                   .run_named("run_memory_usage", run_id)
+                   .unwrap_or(-1) as libc::int64_t;
     } else {
         return -1 as libc::int64_t;
     }
@@ -397,7 +401,7 @@ pub extern "C" fn weld_set_log_level(level: WeldLogLevel) {
         WeldLogLevel::Info => log::LogLevelFilter::Info,
         WeldLogLevel::Debug => log::LogLevelFilter::Debug,
         WeldLogLevel::Trace => log::LogLevelFilter::Trace,
-        _ => log::LogLevelFilter::Off
+        _ => log::LogLevelFilter::Off,
     };
 
     let format = |rec: &log::LogRecord| {
