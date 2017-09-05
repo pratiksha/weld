@@ -51,6 +51,7 @@ pub mod exprs;
 // TODO not the right place for this.
 pub mod vectorizer;
 pub mod cost;
+pub mod cost_params;
 pub mod test_utils;
 
 pub mod easy_ll;
