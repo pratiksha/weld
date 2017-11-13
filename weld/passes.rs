@@ -6,6 +6,8 @@ use super::transforms::inliner;
 use super::transforms::size_inference;
 use super::transforms::annotator;
 use super::transforms::vectorizer;
+use super::transforms::predication;
+use super::transforms::measurement;
 
 use super::expr_hash::*;
 
@@ -70,9 +72,12 @@ lazy_static! {
         m.insert("infer-size",
                  Pass::new(vec![size_inference::infer_size],
                  "infer-size"));
-        m.insert("predicate",
-                 Pass::new(vec![vectorizer::predicate],
-                 "predicate"));
+        // m.insert("predicate",
+        //          Pass::new(vec![predication::predicate],
+        //          "predicate"));
+        m.insert("measurement",
+                 Pass::new(vec![measurement::generate_measurement_branch],
+                 "measurement"));
         m.insert("vectorize",
                  Pass::new(vec![vectorizer::vectorize],
                  "vectorize"));
