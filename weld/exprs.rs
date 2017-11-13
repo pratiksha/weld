@@ -8,6 +8,8 @@ use super::ast::LiteralKind::*;
 use super::error::*;
 use super::annotations::*;
 
+use super::pretty_print::*;
+
 fn new_expr(kind: ExprKind<Type>, ty: Type) -> WeldResult<Expr<Type>> {
     Ok(Expr {
            kind: kind,
@@ -39,15 +41,22 @@ pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr<Type>> {
 
 pub fn binop_expr(kind: BinOpKind, left: Expr<Type>, right: Expr<Type>) -> WeldResult<Expr<Type>> {
     if left.ty != right.ty {
-        weld_err!("Internal error: Mismatched types in binop_expr")
+        weld_err!("Internal error: Mismatched types in binop_expr: {} {}",
+                  print_type(&left.ty), print_type(&right.ty))
     } else {
-        let ty = left.ty.clone();
+        let ty = if kind.is_comparison() {
+            Scalar(ScalarKind::Bool)
+        } else {
+            left.ty.clone()
+        };
+        
         new_expr(BinOp {
-                     kind: kind,
-                     left: Box::new(left),
-                     right: Box::new(right),
-                 },
+            kind: kind,
+            left: Box::new(left),
+            right: Box::new(right),
+        },
                  ty)
+                
     }
 }
 
@@ -236,13 +245,14 @@ pub fn let_expr(name: Symbol, value: Expr<Type>, body: Expr<Type>) -> WeldResult
 }
 
 pub fn if_expr(cond: Expr<Type>, on_true: Expr<Type>, on_false: Expr<Type>) -> WeldResult<Expr<Type>> {
-    let err = weld_err!("Internal error: Mismatched types in if_expr");
     if cond.ty != Scalar(ScalarKind::Bool) {
-        return err;
+        return weld_err!("Internal error: Mismatched types in if_expr: cond.ty is {}",
+        print_type(&cond.ty));
     }
 
     if on_true.ty != on_false.ty {
-        return err;
+        return weld_err!("Internal error: Mismatched types in if_expr: {} {}",
+        print_type(&on_true.ty), print_type(&on_false.ty));
     }
 
     let ty = on_true.ty.clone();
@@ -408,7 +418,7 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
                 vec_elem_tys[0].clone()
             };
             if *param_2_ty != elem_ty {
-                return weld_err!("Internal error: Mismatched types in for_expr - function elem type",);
+                return weld_err!("Internal error: Mismatched types in for_expr - function elem type {} {}", print_type(&*param_2_ty), print_type(&elem_ty));
             }
         } else {
             let composite_ty = if vectorized {
