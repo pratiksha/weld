@@ -72,9 +72,9 @@ lazy_static! {
         m.insert("infer-size",
                  Pass::new(vec![size_inference::infer_size],
                  "infer-size"));
-        // m.insert("predicate",
-        //          Pass::new(vec![predication::predicate],
-        //          "predicate"));
+        m.insert("predicate",
+                 Pass::new(vec![predication::predicate],
+                           "predicate"));
         m.insert("measurement",
                  Pass::new(vec![measurement::generate_measurement_branch],
                  "measurement"));

@@ -2377,6 +2377,30 @@ fn nested_appender_loop() {
     }
 }
 
+fn measure_selectivity() {
+    #[allow(dead_code)]
+    struct Args {
+        v: WeldVec<i32>
+    }
+
+    let input_vec = vec![-1, 2, 3, 4, 5];
+    let ref input_data = Args {
+        v: WeldVec {
+            data: input_vec.as_ptr(),
+            len: input_vec.len() as i64,
+        }
+    };
+
+    let expected = 2; // 2 elements out of first 3 that satisfy condition
+
+    let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))";
+//    let code = "|v:vec[i32]| (result(for(iter(v:vec[i32],0L,min(3L,len(v:vec[i32])),1L),merger[i32,+], |b,i,e:i32| if(e:i32>0, merge(b, 1), merge(b, 0)))))";
+
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    check_result_and_free(ret_value, expected);
+}
+
 fn nested_for_loops() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -2498,6 +2522,7 @@ fn main() {
              ("simple_float_mod", simple_float_mod),
              ("simple_int_mod", simple_int_mod),
              ("predicate_if_iff_annotated", predicate_if_iff_annotated),
+             //("measure_selectivity", measure_selectivity),
              ("nested_for_loops", nested_for_loops),
              ("nested_appender_loop", nested_appender_loop),
              ("simple_sort", simple_sort),
