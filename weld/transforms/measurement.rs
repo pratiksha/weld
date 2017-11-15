@@ -26,20 +26,14 @@ fn generate_measurement_func(cond: &Expr<Type>,
                              elem_ty: &Type,
                              params_original: &Vec<Parameter<Type>>,
                              ctx: &Expr<Type>) -> WeldResult<(Expr<Type>,
-                                                                              Expr<Type>)> {
+                                                              Expr<Type>)> {
+    let mut sym_gen = SymbolGenerator::from_expression(ctx);
+    
     print!("in generate func! {}\n", print_expr(cond));
-    let bk = BuilderKind::Merger(Box::new(Scalar(ScalarKind::F64)), BinOpKind::Add);
+    let bk = BuilderKind::Merger(Box::new(Scalar(ScalarKind::F32)), BinOpKind::Add);
     let builder = exprs::newbuilder_expr(bk, None)?;
 
-    let f64_1 = exprs::literal_expr(LiteralKind::F64Literal(1f64.to_bits()))?;
-    let on_true = exprs::merge_expr(builder.clone(),
-                                    f64_1.clone())?;
-    let f64_2 = exprs::literal_expr(LiteralKind::F64Literal(0f64.to_bits()))?;
-    let on_false = exprs::merge_expr(builder.clone(),
-                                     f64_2.clone())?;
-
     // Create new params for the loop.
-    let mut sym_gen = SymbolGenerator::from_expression(ctx);
     print!("type in measure: {}\n", print_type(elem_ty));
     let params = vec![Parameter {
                           name: sym_gen.new_symbol("b"),
@@ -54,12 +48,22 @@ fn generate_measurement_func(cond: &Expr<Type>,
                           ty: elem_ty.clone()
                       }];
 
+    let builder_name = exprs::ident_expr(params[0].name.clone(), params[0].ty.clone())?;
+
+    let f32_1 = exprs::literal_expr(LiteralKind::F32Literal(1f32.to_bits()))?;
+    let on_true = exprs::merge_expr(builder_name.clone(),
+                                    f32_1.clone())?;
+    let f32_2 = exprs::literal_expr(LiteralKind::F32Literal(0f32.to_bits()))?;
+    let on_false = exprs::merge_expr(builder_name.clone(),
+                                     f32_2.clone())?;
+
     // Substitute in new params.
     let mut cond_new = cond.clone();
     for i in 0..params.len() {
         cond_new.substitute(&params_original[i].name.clone(),
         &exprs::ident_expr(params[i].name.clone(), params[i].ty.clone())?);
     }
+    
     print!("got cond! {}\n", print_expr(&cond_new));
     let body = exprs::if_expr(cond_new.clone(), on_true, on_false)?;
     print!("got branch! {}\n", print_expr(&body));
@@ -79,11 +83,11 @@ pub fn measure_selectivity(e: &Expr<Type>, k: i64) -> WeldResult<Option<Expr<Typ
         let mut types = vec![];
 
         print!("got for!\n");
+        let mut sym_gen = SymbolGenerator::from_expression(e);
         for it in iters.iter() {
             if let Vector(ref vec_ty) = (*it).data.ty { // only works if all inputs are Vectors
                 if let Lambda { ref params, ref body } = func.kind {
                     if let If { ref cond, .. } = body.kind {
-                        let mut sym_gen = SymbolGenerator::from_expression(&((*it).data));
                         let name = sym_gen.new_symbol("d"); // don't copy the data
                         let data_ident = exprs::ident_expr(name.clone(),
                                                            (*it).data.ty.clone())?;
@@ -129,16 +133,15 @@ pub fn measure_selectivity(e: &Expr<Type>, k: i64) -> WeldResult<Option<Expr<Typ
                                                        builder.clone(),
                                                        func, false)?; // don't vectorize for now
                 print!("got loop! {}\n", print_expr(&measure_loop));
-                for (name, data) in names.iter().zip(data_clones.iter()) {
-                    measure_loop = exprs::let_expr((*name).clone(),
-                                                   (*data).clone(),
-                                                   measure_loop)?;
-                }
-                print!("finished loop! {}\n", print_expr(&measure_loop));
-                let res = exprs::binop_expr(BinOpKind::Divide, // normalize to get selectivity
+                let mut res = exprs::binop_expr(BinOpKind::Divide, // normalize to get selectivity
                                             exprs::result_expr(measure_loop)?,
-                                            exprs::cast_expr(ScalarKind::F64,
+                                            exprs::cast_expr(ScalarKind::F32,
                                                 niters_exprs[0].clone())?)?; 
+                for (name, data) in names.iter().zip(data_clones.iter()) {
+                    res = exprs::let_expr((*name).clone(),
+                                          (*data).clone(),
+                                          res)?;
+                }
                 print!("got res! {}\n", print_expr(&res));
                 return Ok(Some(res))
             }
@@ -149,20 +152,22 @@ pub fn measure_selectivity(e: &Expr<Type>, k: i64) -> WeldResult<Option<Expr<Typ
 }
 
 pub fn generate_measurement_branch(e: &mut Expr<Type>) {
+    println!("in generate");
+    print!("transforming: {}\n", print_expr(e));
     e.transform_and_continue_res(&mut |ref mut e| {
         if let For { ref iters, ref builder, ref func } = e.kind {
-            print!("got for! {}\n", print_expr(e));
+            println!("got for! {}\n", print_expr(e));
             if let Lambda { ref params, ref body } = func.kind {
                 print!("got lambda! {}\n", print_expr(e));
                 if !(should_be_predicated(body)) {
-                    print!("not predicating in branch! {}", print_expr(e));
+                    print!("not predicating in branch! {}", print_expr(body));
                     return Ok((None, false));
                 }
 
                 print!("generating measurement! {}\n", print_expr(e));
                 // insert measurement code
-                let measure_code = measure_selectivity(e, 3)?.unwrap();
-                let threshold = exprs::literal_expr(LiteralKind::F64Literal((0.6f64).to_bits()))?;
+                let measure_code = measure_selectivity(e, 30)?.unwrap();
+                let threshold = exprs::literal_expr(LiteralKind::F32Literal((0.6f32).to_bits()))?;
                 let unpredicated = e.clone();
                 print!("calling predicate! {}\n", print_expr(e));
                 let pred_body = generate_predicated_expr(body)?.unwrap();
@@ -181,7 +186,7 @@ pub fn generate_measurement_branch(e: &mut Expr<Type>) {
             }
         }
         
-        return Ok((None, false));
+        return Ok((None, true));
     });
 }
 
@@ -205,4 +210,3 @@ fn cond_test() {
     //           expected);
     
 }
-

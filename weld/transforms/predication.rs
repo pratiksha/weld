@@ -97,7 +97,8 @@ pub fn predicate(e: &mut Expr<Type>) {
 }
 
 pub fn should_be_predicated(e: &Expr<Type>) -> bool {
-    e.annotations.predicate()
+    true
+    //e.annotations.predicate()
 }
 
 fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {

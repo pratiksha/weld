@@ -16,6 +16,7 @@ use std::collections::HashMap;
 pub struct Pass {
     transforms: Vec<fn(&mut Expr<Type>)>,
     pass_name: String,
+    execute_once: bool,
 }
 
 /// Manually implement Clone for Pass because it cannot be #derived due to the fn type inside it.
@@ -23,17 +24,20 @@ impl Clone for Pass {
     fn clone(&self) -> Pass {
         Pass {
             transforms: self.transforms.iter().map(|p| *p).collect::<Vec<_>>(),
-            pass_name: self.pass_name.clone()
+            pass_name: self.pass_name.clone(),
+            execute_once: self.execute_once.clone(),
         }
     }
 }
 
 impl Pass {
-    pub fn new(transforms: Vec<fn(&mut Expr<Type>)>, pass_name: &'static str) -> Pass {
+    pub fn new(transforms: Vec<fn(&mut Expr<Type>)>, pass_name: &'static str,
+               execute_once: bool) -> Pass {
         return Pass {
-                   transforms: transforms,
-                   pass_name: String::from(pass_name),
-               };
+            transforms: transforms,
+            pass_name: String::from(pass_name),
+            execute_once: execute_once,
+        };
     }
 
     pub fn transform(&self, mut expr: &mut Expr<Type>) -> WeldResult<()> {
@@ -46,6 +50,10 @@ impl Pass {
             let after = ExprHash::from(expr)?.value();
             continue_pass = !(before == after);
             before = after;
+
+            if self.execute_once {
+                continue_pass = false;
+            }
         }
         Ok(())
     }
@@ -59,31 +67,31 @@ lazy_static! {
     pub static ref OPTIMIZATION_PASSES: HashMap<&'static str, Pass> = {
         let mut m = HashMap::new();
         m.insert("inline-apply",
-                 Pass::new(vec![inliner::inline_apply], "inline-apply"));
+                 Pass::new(vec![inliner::inline_apply], "inline-apply", false));
         m.insert("inline-let",
-                 Pass::new(vec![inliner::inline_let], "inline-let"));
+                 Pass::new(vec![inliner::inline_let], "inline-let", false));
         m.insert("inline-zip",
-                 Pass::new(vec![inliner::inline_zips], "inline-zip"));
+                 Pass::new(vec![inliner::inline_zips], "inline-zip", false));
         m.insert("loop-fusion",
                  Pass::new(vec![loop_fusion::fuse_loops_horizontal,
                                 loop_fusion::fuse_loops_vertical,
                                 inliner::inline_get_field],
-                 "loop-fusion"));
+                 "loop-fusion", false));
         m.insert("infer-size",
                  Pass::new(vec![size_inference::infer_size],
-                 "infer-size"));
+                 "infer-size", false));
         m.insert("predicate",
                  Pass::new(vec![predication::predicate],
-                           "predicate"));
+                           "predicate", false));
         m.insert("measurement",
                  Pass::new(vec![measurement::generate_measurement_branch],
-                 "measurement"));
+                 "measurement", true));
         m.insert("vectorize",
                  Pass::new(vec![vectorizer::vectorize],
-                 "vectorize"));
+                 "vectorize", false));
         m.insert("fix-iterate",
                  Pass::new(vec![annotator::force_iterate_parallel_fors],
-                 "fix-iterate"));
+                 "fix-iterate", false));
 
         m
     };
