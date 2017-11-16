@@ -20,11 +20,11 @@ use pretty_print::*;
 
 pub fn generate_predicated_expr(e: &Expr<Type>) -> WeldResult<Option<Expr<Type>>> {
     if !(should_be_predicated(e)) {
-        print!("not predicating! {}\n", print_expr(e));
+//        print!("not predicating! {}\n", print_expr(e));
         return Ok(None);
     }
 
-    print!("predicating now! {}\n", print_expr(e));
+//    print!("predicating now! {}\n", print_expr(e));
     // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
     if let If { ref cond, ref on_true, ref on_false } = e.kind {
         if let Merge { ref builder, ref value } = on_true.kind {

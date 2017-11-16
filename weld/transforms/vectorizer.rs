@@ -22,7 +22,7 @@ use type_inference::*;
 
 /// Vectorize an expression.
 pub fn vectorize(expr: &mut Expr<Type>) {
-    println!("in vectorize");
+//    println!("in vectorize");
     let mut vectorized = false;
     // Used to create the identifiers which refer to the data items. These identifiers are
     // used to pull out the iter into a let statement. This lets us repeat the iter via an

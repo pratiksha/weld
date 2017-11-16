@@ -29,12 +29,12 @@ fn generate_measurement_func(cond: &Expr<Type>,
                                                               Expr<Type>)> {
     let mut sym_gen = SymbolGenerator::from_expression(ctx);
     
-    print!("in generate func! {}\n", print_expr(cond));
+//    print!("in generate func! {}\n", print_expr(cond));
     let bk = BuilderKind::Merger(Box::new(Scalar(ScalarKind::F32)), BinOpKind::Add);
     let builder = exprs::newbuilder_expr(bk, None)?;
 
     // Create new params for the loop.
-    print!("type in measure: {}\n", print_type(elem_ty));
+//    print!("type in measure: {}\n", print_type(elem_ty));
     let params = vec![Parameter {
                           name: sym_gen.new_symbol("b"),
                           ty: builder.ty.clone(),
@@ -64,44 +64,38 @@ fn generate_measurement_func(cond: &Expr<Type>,
         &exprs::ident_expr(params[i].name.clone(), params[i].ty.clone())?);
     }
     
-    print!("got cond! {}\n", print_expr(&cond_new));
+//    print!("got cond! {}\n", print_expr(&cond_new));
     let body = exprs::if_expr(cond_new.clone(), on_true, on_false)?;
-    print!("got branch! {}\n", print_expr(&body));
+//    print!("got branch! {}\n", print_expr(&body));
 
     let func = exprs::lambda_expr(params, body)?;
-    print!("finished func! {}\n", print_expr(&func));
+//    print!("finished func! {}\n", print_expr(&func));
     Ok((builder, func)) // need to pass builder to for loop
 }
 
-/// generate code to measure selectivity of first k rows
+/// Generate code to measure selectivity of first k rows.
+/// Copies input iterator data -- vectors should be refactored into Let expressions as preprocessing.
 pub fn measure_selectivity(e: &Expr<Type>, k: i64) -> WeldResult<Option<Expr<Type>>> {
     if let For { ref iters, ref builder, ref func } = e.kind {
         let mut measure_iters = vec![];
-        let mut data_clones = vec![];
-        let mut names = vec![];
         let mut niters_exprs = vec![]; // TODO doing some extra copying to avoid an Option
         let mut types = vec![];
 
-        print!("got for!\n");
+//        print!("got for!\n");
         let mut sym_gen = SymbolGenerator::from_expression(e);
         for it in iters.iter() {
             if let Vector(ref vec_ty) = (*it).data.ty { // only works if all inputs are Vectors
                 if let Lambda { ref params, ref body } = func.kind {
                     if let If { ref cond, .. } = body.kind {
-                        let name = sym_gen.new_symbol("d"); // don't copy the data
-                        let data_ident = exprs::ident_expr(name.clone(),
-                                                           (*it).data.ty.clone())?;
-
                         // length should be min of vector length and requested length
                         let niters_expr = exprs::binop_expr(BinOpKind::Min,
                                                             exprs::literal_expr(
                                                                 LiteralKind::I64Literal(k))?,
-                                                           exprs::length_expr(data_ident)?)?;
+                                                            exprs::length_expr(*it.data.clone())?)?;
                         niters_exprs.push(niters_expr.clone());
                         
                         let measure_iter = Iter {
-                            data: Box::new(exprs::ident_expr(name.clone(),
-                                                             (*it).data.ty.clone())?),
+                            data: Box::new(*it.data.clone()),
                             start: Some(Box::new(exprs::literal_expr(LiteralKind::I64Literal(0))?)),
                             end: Some(Box::new(niters_expr.clone())),
                             stride: Some(Box::new(exprs::literal_expr(LiteralKind::I64Literal(1))?)),
@@ -109,40 +103,33 @@ pub fn measure_selectivity(e: &Expr<Type>, k: i64) -> WeldResult<Option<Expr<Typ
                         };
                         
                         measure_iters.push(measure_iter);
-                        data_clones.push(*(*it).data.clone());
-                        names.push(name);
                         types.push(*vec_ty.clone());
                     }
                 }
             }
         }
 
-        print!("done making iters!\n");
+//        print!("done making iters!\n");
         if let Lambda { ref params, ref body } = func.kind {
-            print!("got lambda!\n");
+//            print!("got lambda!\n");
             if let If { ref cond, .. } = body.kind {
-                print!("got if! types: {}\n", types.len());
+//                print!("got if! types: {}\n", types.len());
                 let (builder, func) = if types.len() == 1 {
                     generate_measurement_func(cond, &types[0], params, e)?
                 } else {
                     generate_measurement_func(cond, &Struct(types), params, e)?
                 };
                 
-                print!("got func! {}\n", print_expr(&func));
+//                print!("got func! {}\n", print_expr(&func));
                 let mut measure_loop = exprs::for_expr(measure_iters,
                                                        builder.clone(),
                                                        func, false)?; // don't vectorize for now
-                print!("got loop! {}\n", print_expr(&measure_loop));
+//                print!("got loop! {}\n", print_expr(&measure_loop));
                 let mut res = exprs::binop_expr(BinOpKind::Divide, // normalize to get selectivity
-                                            exprs::result_expr(measure_loop)?,
-                                            exprs::cast_expr(ScalarKind::F32,
-                                                niters_exprs[0].clone())?)?; 
-                for (name, data) in names.iter().zip(data_clones.iter()) {
-                    res = exprs::let_expr((*name).clone(),
-                                          (*data).clone(),
-                                          res)?;
-                }
-                print!("got res! {}\n", print_expr(&res));
+                                                exprs::result_expr(measure_loop)?,
+                                                exprs::cast_expr(ScalarKind::F32,
+                                                             niters_exprs[0].clone())?)?; 
+//                print!("got res! {}\n", print_expr(&res));
                 return Ok(Some(res))
             }
         }
@@ -152,37 +139,72 @@ pub fn measure_selectivity(e: &Expr<Type>, k: i64) -> WeldResult<Option<Expr<Typ
 }
 
 pub fn generate_measurement_branch(e: &mut Expr<Type>) {
-    println!("in generate");
-    print!("transforming: {}\n", print_expr(e));
+//    println!("in generate");
+//    print!("transforming: {}\n", print_expr(e));
     e.transform_and_continue_res(&mut |ref mut e| {
-        if let For { ref iters, ref builder, ref func } = e.kind {
-            println!("got for! {}\n", print_expr(e));
-            if let Lambda { ref params, ref body } = func.kind {
-                print!("got lambda! {}\n", print_expr(e));
-                if !(should_be_predicated(body)) {
-                    print!("not predicating in branch! {}", print_expr(body));
-                    return Ok((None, false));
-                }
+        let mut data_clones = vec![];
+        let mut names = vec![];
+        let mut new_iters = vec![];
 
-                print!("generating measurement! {}\n", print_expr(e));
-                // insert measurement code
-                let measure_code = measure_selectivity(e, 30)?.unwrap();
-                let threshold = exprs::literal_expr(LiteralKind::F32Literal((0.6f32).to_bits()))?;
-                let unpredicated = e.clone();
-                print!("calling predicate! {}\n", print_expr(e));
-                let pred_body = generate_predicated_expr(body)?.unwrap();
-                let predicated = exprs::for_expr(iters.clone(), *builder.clone(),
-                                                 exprs::lambda_expr(params.clone(),
-                                                                    pred_body)?,
-                                                 false)?;
-                
-                print!("got predicate! {}\n", print_expr(&predicated));
-                let branch = exprs::if_expr(
-                    exprs::binop_expr(BinOpKind::GreaterThan, measure_code, threshold)?,
-                    predicated,
-                    unpredicated)?;
-                print!("got branch! {}\n", print_expr(&branch));
-                return Ok((Some(branch), false));
+        if let For { ref iters, ref builder, ref func } = e.kind {
+            let mut sym_gen = SymbolGenerator::from_expression(e);
+
+            /* generate new names for all vectors to avoid copying */
+            for it in iters.iter() {
+                if let Vector(ref vec_ty) = (*it).data.ty { // only works if all inputs are Vectors
+                    if let Lambda { ref params, ref body } = func.kind {
+                        if let If { ref cond, .. } = body.kind {
+                            let name = sym_gen.new_symbol("d"); // don't copy the data
+                            let data_ident = exprs::ident_expr(name.clone(),
+                                                               (*it).data.ty.clone())?;
+                            data_clones.push(*(*it).data.clone());
+                            names.push(name.clone());
+
+                            let mut new_iter = it.clone();
+                            new_iter.data = Box::new(data_ident.clone());
+                            new_iters.push(new_iter);
+                        }
+                    }
+                }
+            }
+
+            let mut unpredicated = exprs::for_expr(new_iters.clone(),
+                                                   *builder.clone(), *func.clone(), false)?;
+
+            if let For { ref iters, ref builder, ref func } = unpredicated.kind {
+                //            println!("got for! {}\n", print_expr(e));
+                if let Lambda { ref params, ref body } = func.kind {
+                    //                print!("got lambda! {}\n", print_expr(e));
+                    if !(should_be_predicated(body)) {
+                        //                    print!("not predicating in branch! {}", print_expr(body));
+                        return Ok((None, false));
+                    }
+
+                    //                print!("generating measurement! {}\n", print_expr(e));
+
+                    // insert measurement code
+                    let measure_code = measure_selectivity(&unpredicated, 200)?.unwrap();
+                    let threshold = exprs::literal_expr(LiteralKind::F32Literal((0.02f32).to_bits()))?;
+                    //                print!("calling predicate! {}\n", print_expr(e));
+                    let pred_body = generate_predicated_expr(body)?.unwrap();
+                    let predicated = exprs::for_expr(iters.clone(), *builder.clone(),
+                                                     exprs::lambda_expr(params.clone(),
+                                                                        pred_body)?,
+                                                     false)?;
+                    
+                    //                print!("got predicate! {}\n", print_expr(&predicated));
+                    let mut branch = exprs::if_expr(
+                        exprs::binop_expr(BinOpKind::GreaterThan, measure_code, threshold)?,
+                        predicated.clone(),
+                        unpredicated.clone())?;
+                    //                print!("got branch! {}\n", print_expr(&branch));
+                    for (name, data) in names.iter().zip(data_clones.iter()) {
+                        branch = exprs::let_expr((*name).clone(),
+                                                 (*data).clone(),
+                                                 branch)?;
+                    }
+                    return Ok((Some(branch), false));
+                }
             }
         }
         
