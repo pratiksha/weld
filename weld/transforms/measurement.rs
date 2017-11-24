@@ -30,7 +30,7 @@ fn generate_measurement_func(cond: &Expr<Type>,
     let mut sym_gen = SymbolGenerator::from_expression(ctx);
     
 //    print!("in generate func! {}\n", print_expr(cond));
-    let bk = BuilderKind::Merger(Box::new(Scalar(ScalarKind::F32)), BinOpKind::Add);
+    let bk = BuilderKind::Merger(Box::new(Scalar(ScalarKind::F64)), BinOpKind::Add);
     let builder = exprs::newbuilder_expr(bk, None)?;
 
     // Create new params for the loop.
@@ -50,12 +50,12 @@ fn generate_measurement_func(cond: &Expr<Type>,
 
     let builder_name = exprs::ident_expr(params[0].name.clone(), params[0].ty.clone())?;
 
-    let f32_1 = exprs::literal_expr(LiteralKind::F32Literal(1f32.to_bits()))?;
+    let f64_1 = exprs::literal_expr(LiteralKind::F64Literal(1f64.to_bits()))?;
     let on_true = exprs::merge_expr(builder_name.clone(),
-                                    f32_1.clone())?;
-    let f32_2 = exprs::literal_expr(LiteralKind::F32Literal(0f32.to_bits()))?;
+                                    f64_1.clone())?;
+    let f64_2 = exprs::literal_expr(LiteralKind::F64Literal(0f64.to_bits()))?;
     let on_false = exprs::merge_expr(builder_name.clone(),
-                                     f32_2.clone())?;
+                                     f64_2.clone())?;
 
     // Substitute in new params.
     let mut cond_new = cond.clone();
@@ -127,7 +127,7 @@ pub fn measure_selectivity(e: &Expr<Type>, k: i64) -> WeldResult<Option<Expr<Typ
 //                print!("got loop! {}\n", print_expr(&measure_loop));
                 let mut res = exprs::binop_expr(BinOpKind::Divide, // normalize to get selectivity
                                                 exprs::result_expr(measure_loop)?,
-                                                exprs::cast_expr(ScalarKind::F32,
+                                                exprs::cast_expr(ScalarKind::F64,
                                                              niters_exprs[0].clone())?)?; 
 //                print!("got res! {}\n", print_expr(&res));
                 return Ok(Some(res))
@@ -136,6 +136,87 @@ pub fn measure_selectivity(e: &Expr<Type>, k: i64) -> WeldResult<Option<Expr<Typ
     }
     
     return Ok(None)
+}
+
+/// Get accesses (GetField, Lookup, Ident) into the data referred to by it_name, removing duplicates.
+/// TODO make duplicate removal faster.
+fn get_accesses(e: &Expr<Type>, it_name: &Symbol) -> Vec<Expr<Type>> {
+    let mut exprs: Vec<Expr<Type>> = vec![];
+    
+    e.traverse_early_stop(&mut |ref e| {
+        if let GetField { ref expr, ref index } = e.kind {
+            if let Ident(ref sym) = expr.kind {
+                if sym == it_name && !(exprs.contains(e)) {
+                    exprs.push((*e).clone());
+                    return true;
+                }
+            }
+        } else if let Lookup { ref data, ref index } = e.kind {
+            if let Ident(ref sym) = data.kind {
+                if sym == it_name && !(exprs.contains(e)) {
+                    exprs.push((*e).clone());
+                    return true;
+                }
+            }
+        } else if let Ident(ref sym) = e.kind {
+            if sym == it_name && !(exprs.contains(e)) {
+                exprs.push((*e).clone());
+                return true;
+            }
+        }
+        
+        false
+    });
+
+    exprs
+}
+
+pub fn load_cost(e: &mut Expr<Type>) -> WeldResult<Option<f64>> {
+    if let Lambda { ref params, ref body } = e.kind {
+        if let Res { ref builder } = body.kind {
+            if let For { ref iters, ref builder, ref func } = builder.kind { 
+                if let Lambda { ref params, ref body } = func.kind {
+                    if !(can_predicate(body)) {
+                        return Ok(None);
+                    }
+
+                    if params.len() != 3 {
+                        return Ok(None); // need lambda in the form |b,i,e|
+                    }
+
+                    let ref it_name = params[2].name;
+                    
+                    // Expression is of the form if(cond, merge(b, e), b)
+                    if let If { ref cond, ref on_true, ref on_false } = body.kind {
+                        // get accesses from cond
+                        let mut cond_accesses = get_accesses(cond, it_name);
+                        
+                        // get accesses from on_true
+                        let mut merge_accesses: Vec<Expr<Type>> = vec![];
+                        if let Merge { ref builder, ref value } = on_true.kind {
+                            merge_accesses = get_accesses(on_true, it_name);
+                        }
+
+                        let mut diff_accesses = vec![];
+                        for exp in merge_accesses {
+                            print!("{}\n", print_expr(&exp));
+                            if !cond_accesses.contains(&exp) {
+                                diff_accesses.push(exp.clone());
+                            }
+                        }
+
+                        for exp in diff_accesses {
+                            print!("{}\n", print_expr(&exp));
+                        }
+                        
+                        return Ok(Some(0.0));
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(None)
 }
 
 pub fn generate_measurement_branch(e: &mut Expr<Type>) {
@@ -184,7 +265,7 @@ pub fn generate_measurement_branch(e: &mut Expr<Type>) {
 
                     // insert measurement code
                     let measure_code = measure_selectivity(&unpredicated, 200)?.unwrap();
-                    let threshold = exprs::literal_expr(LiteralKind::F32Literal((0.02f32).to_bits()))?;
+                    let threshold = exprs::literal_expr(LiteralKind::F64Literal((0.02f64).to_bits()))?;
                     //                print!("calling predicate! {}\n", print_expr(e));
                     let pred_body = generate_predicated_expr(body)?.unwrap();
                     let predicated = exprs::for_expr(iters.clone(), *builder.clone(),
@@ -226,6 +307,19 @@ fn cond_test() {
     let mut e = typed_expr(code);
     generate_measurement_branch(&mut e);
     print!("{}\n", print_typed_expr(&e).as_str());
+
+    //let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|merge(b:merger[i32,+],select((e:i32>0),e:i32,0))))";
+    //assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
+    //           expected);
+    
+}
+
+#[test]
+fn cost_test() {
+    let code = "|v:vec[i32], d:vec[i32]| result(for(zip(d, v), merger[i32,+], |b,i,e| if(e.$0>0, merge(b,e.$0+e.$1), b)))";
+    let mut e = typed_expr(code);
+    let cost = load_cost(&mut e).unwrap().unwrap();
+    print!("{}\n", cost);
 
     //let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|merge(b:merger[i32,+],select((e:i32>0),e:i32,0))))";
     //assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
