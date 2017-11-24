@@ -18,6 +18,26 @@ use type_inference::*;
 
 use pretty_print::*;
 
+pub fn can_predicate(e: &Expr<Type>) -> bool {
+    if let If { ref cond, ref on_true, ref on_false } = e.kind {
+        if let Merge { ref builder, ref value } = on_true.kind {
+            if let Ident(ref name) = on_false.kind {
+                if let Ident(ref name2) = builder.kind {
+                    if name == name2 {
+                        if let Builder(ref bk, _) = builder.ty {
+                            print!("can predicate\n");
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    print!("can't predicate\n");
+    false
+}
+
 pub fn generate_predicated_expr(e: &Expr<Type>) -> WeldResult<Option<Expr<Type>>> {
     if !(should_be_predicated(e)) {
 //        print!("not predicating! {}\n", print_expr(e));
