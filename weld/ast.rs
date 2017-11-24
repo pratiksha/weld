@@ -55,7 +55,7 @@ pub enum Type {
 impl Type {
     /// Return true if a given type is SIMD vectorized, which concretely means that it is
     /// either a simd[T], a builder, or a struct of SIMD types.
-    ///
+    /// 
     /// TODO: we should investigate just using simd[struct[T]] for structs and turning it
     /// to the nested form at runtime.
     pub fn is_simd(&self) -> bool {
@@ -873,6 +873,18 @@ impl<T: TypeBounds> Expr<T> {
         func(self);
         for c in self.children() {
             c.traverse(func);
+        }
+    }
+
+        /// Run a closure on this expression and every child, in pre-order.
+    pub fn traverse_early_stop<F>(&self, func: &mut F)
+        where F: FnMut(&Expr<T>) -> (bool)
+    {
+        let terminate = func(self);
+        if !terminate {
+            for c in self.children() {
+                c.traverse_early_stop(func);
+            }
         }
     }
 
