@@ -8,3 +8,4 @@ pub mod annotator;
 pub mod predication;
 pub mod vectorizer;
 pub mod measurement;
+pub mod short_circuit;
