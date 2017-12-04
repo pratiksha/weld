@@ -83,7 +83,7 @@ lazy_static! {
                  "infer-size", false));
         m.insert("short-circuit-booleans",
                  Pass::new(vec![short_circuit::short_circuit_booleans],
-                 "short-circuit-booleans"));
+                 "short-circuit-booleans", false));
         m.insert("predicate",
                  Pass::new(vec![predication::predicate],
                            "predicate", false));

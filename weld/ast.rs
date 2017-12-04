@@ -76,6 +76,30 @@ impl Type {
         }
     }
 
+    pub fn is_fixed_length(&self) -> bool {
+        use self::Type::*;
+        match *self {
+            Scalar(_) => true,
+            Simd(_) => true,
+            Struct(ref fields) => fields.iter().all(|f| f.is_fixed_length()),
+            _ => false
+        }
+    }
+
+    pub fn bits(&self) -> Option<u32> {
+        if !(self.is_fixed_length()) {
+            return None;
+        }
+
+        use self::Type::*;
+        match *self {
+            Scalar(ref sk) => Some(sk.bits()),
+            Simd(ref sk) => Some(sk.bits()),
+            Struct(ref fields) => Some(fields.iter().map(|x| x.bits().unwrap()).sum()),
+            _ => None
+        }
+    }
+    
     /// Get the vectorized version of a type, if it is vectorizable.
     pub fn simd_type(&self) -> WeldResult<Type> {
         use self::Type::*;

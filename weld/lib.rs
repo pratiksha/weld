@@ -54,6 +54,7 @@ pub mod conf;
 pub mod util;
 pub mod exprs;
 pub mod expr_hash;
+pub mod cost_params;
 
 pub mod easy_ll;
 

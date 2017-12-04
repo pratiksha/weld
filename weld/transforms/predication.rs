@@ -25,8 +25,13 @@ pub fn can_predicate(e: &Expr<Type>) -> bool {
                 if let Ident(ref name2) = builder.kind {
                     if name == name2 {
                         if let Builder(ref bk, _) = builder.ty {
-                            print!("can predicate\n");
-                            return true;
+                            let res = match *bk {
+                                BuilderKind::Merger(_, _) |
+                                BuilderKind::DictMerger(_, _, _) |
+                                BuilderKind::VecMerger(_, _) => true,
+                                _ => false
+                            };
+                            return res;
                         }
                     }
                 }
@@ -34,7 +39,7 @@ pub fn can_predicate(e: &Expr<Type>) -> bool {
         }
     }
 
-    print!("can't predicate\n");
+//    print!("can't predicate\n");
     false
 }
 

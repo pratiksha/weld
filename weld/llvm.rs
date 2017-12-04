@@ -2060,7 +2060,7 @@ impl LlvmGenerator {
         match *arg_ty {
             Scalar(_) | Simd(_) => {
                 code.add(format!("{} = {} {} {}, {}",
-                    &res, try!(llvm_binop(*bin_op, arg_ty)), &llvm_ty, arg1, arg2));
+                                 &res, try!(llvm_binop(*bin_op, arg_ty)), &llvm_ty, arg1, arg2));
             }
 
             Struct(ref fields) => {
@@ -3673,36 +3673,6 @@ fn predicate_only(code: &str) -> WeldResult<TypedExpr> {
 
     Ok(typed_e)
 }
-
-// #[test]
-// fn predicate_iff_annotated() {
-//     /* Ensure predication is only applied if annotation is present. */
-
-//     /* annotation true */
-//     let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))";
-//     let typed_e = predicate_only(code);
-//     assert!(typed_e.is_ok());
-//     let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|merge(b:merger[i32,+],select((e:i32>0),e:i32,0))))";
-//     assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
-//                expected);
-
-//     /* annotation false */
-//     let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:false)if(e>0, merge(b,e), b)))";
-//     let typed_e = predicate_only(code);
-//     assert!(typed_e.is_ok());
-//     let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|if((e:i32>0),merge(b:merger[i32,+],e:i32),b:merger[i32,+])))";
-//     assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
-//                expected);
-
-//     /* annotation missing */
-//     let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))";
-//     let typed_e = predicate_only(code);
-//     assert!(typed_e.is_ok());
-//     let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|if((e:i32>0),merge(b:merger[i32,+],e:i32),b:merger[i32,+])))";
-//     assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
-//                expected);
-// }
-
 
 #[test]
 fn predicate_dictmerger() {
