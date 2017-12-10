@@ -117,9 +117,16 @@ lazy_static! {
         m.insert("short-circuit-booleans",
                  Pass::new(vec![Transformation::new(short_circuit::short_circuit_booleans)],
                  "short-circuit-booleans", false));
-        m.insert("measurement",
+	m.insert("inline-literals",		   
+                 Pass::new(vec![Transformation::new(inliner::inline_negate),
+			        Transformation::new(inliner::inline_cast)],
+			   "inline-literals", false));		
+	m.insert("unroll-structs",	
+		 Pass::new(vec![Transformation::new(inliner::unroll_structs)],	
+			   "unroll-structs", false));	
+	m.insert("measurement",
                  Pass::new(vec![Transformation::new(measurement::generate_measurement_branch)],
-                 "measurement", true));
+                           "measurement", true));
         m.insert("predicate",
                  Pass::new(vec![Transformation::new(predication::predicate_merge_expr),
                                 Transformation::new(predication::predicate_simple_expr)],

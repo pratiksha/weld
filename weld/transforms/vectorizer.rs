@@ -92,6 +92,26 @@ pub fn vectorize(expr: &mut Expr<Type>) {
     });
 }
 
+/// Convert logical operators to bitwise operators.
+pub fn convert_to_bitwise(expr: &mut TypedExpr) {
+    use ast::BinOpKind::*;
+    expr.transform_up(&mut |ref mut expr| {
+        if !should_be_predicated(expr) {
+            return None;
+        }
+        match expr.kind {
+            BinOp { ref mut kind, .. } if *kind == LogicalAnd => {
+                *kind = BitwiseAnd;
+            }
+            BinOp { ref mut kind, .. } if *kind == LogicalOr => {
+                *kind = BitwiseOr;
+            }
+            _ => ()
+        };
+        None
+    })
+}
+
 /// Returns `true` if this is a set of iterators we can vectorize, `false` otherwise.
 ///
 /// We can vectorize an iterator if all of its iterators consume the entire collection.
@@ -127,6 +147,9 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
             } else if let Struct(_) = e.ty {
                 e.ty = e.ty.simd_type()?;
             }
+        }
+        Let { .. } => {
+            e.ty = e.ty.simd_type()?;
         }
         GetField { .. } => {
             e.ty = e.ty.simd_type()?;
