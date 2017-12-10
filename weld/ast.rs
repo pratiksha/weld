@@ -287,6 +287,16 @@ pub struct Iter<T: TypeBounds> {
     pub kind: IterKind,
 }
 
+
+impl<T: TypeBounds> Iter<T> {
+    /// Returns true if this is a simple iterator with no start/stride/end specified
+    /// (i.e., it iterates over all the input data) and kind `ScalarIter`.
+    pub fn is_simple(&self) -> bool {
+        return self.start.is_none() && self.end.is_none() && self.stride.is_none() &&
+            self.kind == IterKind::ScalarIter;
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind<T: TypeBounds> {
     // TODO: maybe all of these should take named parameters
@@ -405,11 +415,19 @@ impl<T: TypeBounds> ExprKind<T> {
             Select { .. } => "Select",
             Lambda  { .. } => "Lambda",
             Apply { .. } => "Apply",
-            CUDF { .. } => "CUDF", 
+            CUDF { .. } => "CUDF",
             NewBuilder(_) => "NewBuilder",
             For { .. } => "For",
             Merge { .. } => "Merge",
             Res { .. } => "Res",
+        }
+    }
+
+    pub fn is_builder_expr(&self) -> bool {
+        use ast::ExprKind::*;
+        match *self {
+            Merge { .. } | Res { .. } | For { .. } | NewBuilder(_) => true,
+            _ => false,
         }
     }
 }
@@ -527,6 +545,9 @@ pub struct Parameter<T: TypeBounds> {
 /// A typed expression struct.
 pub type TypedExpr = Expr<Type>;
 
+/// A typed iterator.
+pub type TypedIter = Iter<Type>;
+ 
 /// A typed parameter.
 pub type TypedParameter = Parameter<Type>;
 
@@ -739,17 +760,18 @@ impl<T: TypeBounds> Expr<T> {
 
     /// Compares two expression trees, returning true if they are the same modulo symbol names.
     /// Symbols in the two expressions must have a one to one correspondance for the trees to be
-    /// considered equal. If an undefined symbol is encountered in &self during the comparison,
-    /// returns an error.
+    /// considered equal. If an undefined symbol is encountered during the comparison, it must
+    /// be the same in both expressions (e.g. for a symbol captured from an outer scope).
     pub fn compare_ignoring_symbols(&self, other: &Expr<T>) -> WeldResult<bool> {
         use self::ExprKind::*;
         use std::collections::HashMap;
         let mut sym_map: HashMap<&Symbol, &Symbol> = HashMap::new();
+        let mut reverse_sym_map: HashMap<&Symbol, &Symbol> = HashMap::new();
 
         fn _compare_ignoring_symbols<'b, 'a, U: TypeBounds>(e1: &'a Expr<U>,
                                                             e2: &'b Expr<U>,
-                                                            sym_map: &mut HashMap<&'a Symbol,
-                                                                                  &'b Symbol>)
+                                                            sym_map: &mut HashMap<&'a Symbol, &'b Symbol>,
+                                                            reverse_sym_map: &mut HashMap<&'b Symbol, &'a Symbol>)
                                                             -> WeldResult<bool> {
             // First, check the type.
             if e1.ty != e2.ty {
@@ -768,6 +790,7 @@ impl<T: TypeBounds> Expr<T> {
                 (&ToVec { .. }, &ToVec { .. }) => Ok(true),
                 (&Let { name: ref sym1, .. }, &Let { name: ref sym2, .. }) => {
                     sym_map.insert(sym1, sym2);
+                    reverse_sym_map.insert(sym2, sym1);
                     Ok(true)
                 }
                 (&Lambda { params: ref params1, .. }, &Lambda { params: ref params2, .. }) => {
@@ -776,6 +799,7 @@ impl<T: TypeBounds> Expr<T> {
                        params1.iter().zip(params2).all(|t| t.0.ty == t.1.ty) {
                         for (p1, p2) in params1.iter().zip(params2) {
                             sym_map.insert(&p1.name, &p2.name);
+                            reverse_sym_map.insert(&p2.name, &p1.name);
                         }
                         Ok(true)
                     } else {
@@ -798,7 +822,10 @@ impl<T: TypeBounds> Expr<T> {
                 (&Sort { .. }, &Sort { .. }) => Ok(true),
                 (&Merge { .. }, &Merge { .. }) => Ok(true),
                 (&Res { .. }, &Res { .. }) => Ok(true),
-                (&For { .. }, &For { .. }) => Ok(true), // TODO need to check Iters?
+                (&For { iters: ref liters, .. }, &For { iters: ref riters, .. })  => {
+                    // If the iter kinds match for each iterator, the non-expression fields match.
+                    Ok(liters.iter().zip(riters.iter()).all(|(ref l, ref r)| l.kind == r.kind))
+                },
                 (&If { .. }, &If { .. }) => Ok(true),
                 (&Iterate { .. }, &Iterate { .. }) => Ok(true),
                 (&Select { .. }, &Select { .. }) => Ok(true),
@@ -821,8 +848,10 @@ impl<T: TypeBounds> Expr<T> {
                 (&Ident(ref l), &Ident(ref r)) => {
                     if let Some(lv) = sym_map.get(l) {
                         Ok(**lv == *r)
+                    } else if reverse_sym_map.contains_key(r) {
+                        Ok(false) // r was defined in other expression but l wasn't defined in self.
                     } else {
-                        weld_err!("undefined symbol {} when comparing expressions", l)
+                        Ok(*l == *r)
                     }
                 }
                 _ => Ok(false), // all else fail.
@@ -840,14 +869,14 @@ impl<T: TypeBounds> Expr<T> {
                 return Ok(false);
             }
             for (c1, c2) in e1_children.iter().zip(e2_children) {
-                let res = _compare_ignoring_symbols(&c1, &c2, sym_map);
+                let res = _compare_ignoring_symbols(&c1, &c2, sym_map, reverse_sym_map);
                 if res.is_err() || !res.as_ref().unwrap() {
                     return res;
                 }
             }
             return Ok(true);
         }
-        _compare_ignoring_symbols(self, other, &mut sym_map)
+        _compare_ignoring_symbols(self, other, &mut sym_map, &mut reverse_sym_map)
     }
 
     /// Substitute Ident nodes with the given symbol for another expression, stopping when an
@@ -986,6 +1015,19 @@ impl<T: TypeBounds> Expr<T> {
         }
         for c in self.children_mut() {
             c.transform(func);
+        }
+    }
+
+    /// Recursively transforms an expression in place by running a function first on its children, then on the root
+    /// expression itself; this can be more efficient than `transform` for some cases
+    pub fn transform_up<F>(&mut self, func: &mut F)
+        where F: FnMut(&mut Expr<T>) -> Option<Expr<T>>
+    {
+        for c in self.children_mut() {
+            c.transform(func);
+        }
+        if let Some(e) = func(self) {
+            *self = e;
         }
     }
 

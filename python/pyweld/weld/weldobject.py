@@ -95,7 +95,7 @@ class WeldObject(object):
         self.argtypes = {}
 
     def __repr__(self):
-        return self.weld_code + " " + str(self.context)
+        return self.weld_code + " " + str(self.context) + " " + str([obj_id for obj_id in self.dependencies])
 
     def update(self, value, tys=None, override=True):
         """
@@ -107,7 +107,6 @@ class WeldObject(object):
         """
         if isinstance(value, WeldObject):
             self.context.update(value.context)
-            self.dependencies.update(value.dependencies)
         else:
             # Ensure that the same inputs always have same names
             value_str = str(value)
@@ -154,7 +153,8 @@ class WeldObject(object):
         text = header + " " + self.get_let_statements() + "\n" + self.weld_code
         return text
 
-    def evaluate(self, restype, verbose=True, decode=True, passes=None):
+    def evaluate(self, restype, verbose=True, decode=True, passes=None,
+                 num_threads=1, apply_experimental_transforms=False):
         function = self.to_weld_func()
 
         # Returns a wrapped ctypes Structure
@@ -196,7 +196,10 @@ class WeldObject(object):
         err = cweld.WeldError()
 
         if passes is not None:
-            conf.set("weld.optimization.passes", ",".join(passes))
+            passes = ",".join(passes)
+            passes = passes.strip()
+            if passes != "":
+                conf.set("weld.optimization.passes", passes)
 
         module = cweld.WeldModule(function, conf, err)
         if err.code() != 0:
@@ -208,9 +211,10 @@ class WeldObject(object):
 
         start = time.time()
         conf = cweld.WeldConf()
-        weld_num_threads = os.environ.get("WELD_NUM_THREADS", "1")
-        conf.set("weld.threads", weld_num_threads)
+        conf.set("weld.threads", str(num_threads))
         conf.set("weld.memory.limit", "100000000000")
+        conf.set("weld.optimization.applyExperimentalTransforms",
+                 "true" if apply_experimental_transforms else "false")
         err = cweld.WeldError()
         weld_ret = module.run(conf, arg, err)
         if err.code() != 0:
