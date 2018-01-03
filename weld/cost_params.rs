@@ -64,6 +64,9 @@ pub fn mem_cost_random() -> f64 {
 
 /* ************************* Instruction Parameters ************************* */
 
+/// constant to scale vectorized costs by
+pub const VEC_CONSTANT: f64 = 0.8;
+
 /// Latency of a standard binary op (+ - / * >= etc.)
 pub const BINOP_LATENCY: f64 = 1.0;
 /// Latency of a vectorized binary op (+ - / * >= etc.)

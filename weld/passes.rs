@@ -81,7 +81,12 @@ impl Pass {
             let after = ExprHash::from(expr)?.value();
             continue_pass = !(before == after);
             before = after;
+
+            if self.execute_once {
+                break;
+            }
         }
+
         Ok(())
     }
     
@@ -121,6 +126,8 @@ lazy_static! {
                  Pass::new(vec![Transformation::new(inliner::inline_negate),
 			        Transformation::new(inliner::inline_cast)],
 			   "inline-literals", false));		
+        m.insert("inline-let-getfield",
+                 Pass::new(vec![Transformation::new(inliner::inline_let_getfield)], "inline-let-getfield", false));
 	m.insert("unroll-structs",	
 		 Pass::new(vec![Transformation::new(inliner::unroll_structs)],	
 			   "unroll-structs", false));	

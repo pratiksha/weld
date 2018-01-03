@@ -8,6 +8,7 @@ pub fn short_circuit_booleans(expr: &mut TypedExpr) {
     // since it removes the predication opportunity.
     let applied = match expr.kind {
         If { ref mut on_true, ref mut on_false, .. } if expr.annotations.predicate() => {
+//        If { ref mut on_true, ref mut on_false, .. }  => {
             short_circuit_booleans(on_true);
             short_circuit_booleans(on_false);
             true
@@ -21,12 +22,20 @@ pub fn short_circuit_booleans(expr: &mut TypedExpr) {
 
     let new = match expr.kind {
         BinOp { ref kind, ref left, ref right } if *kind == BinOpKind::LogicalAnd => {
-            Some(if_expr(left.as_ref().clone(), right.as_ref().clone(), literal_expr(LiteralKind::BoolLiteral(false)).unwrap()).unwrap())
+            if left.ty.is_simd() {
+                None
+            } else {
+                Some(if_expr(left.as_ref().clone(), right.as_ref().clone(), literal_expr(LiteralKind::BoolLiteral(false)).unwrap()).unwrap())
+            }
         },
         BinOp { ref kind, ref left, ref right } if *kind == BinOpKind::LogicalOr => {
-            Some(if_expr(left.as_ref().clone(), literal_expr(LiteralKind::BoolLiteral(true)).unwrap(), right.as_ref().clone()).unwrap())
+            if left.ty.is_simd() {
+                None
+            } else {
+                Some(if_expr(left.as_ref().clone(), literal_expr(LiteralKind::BoolLiteral(true)).unwrap(), right.as_ref().clone()).unwrap())
+            }
         },
-        _ => None,
+         _ => None,
     };
 
     if let Some(new) = new {

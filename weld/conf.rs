@@ -22,7 +22,7 @@ pub const DUMP_CODE_KEY: &'static str = "weld.compile.dumpCode";
 pub const DUMP_CODE_DIR_KEY: &'static str = "weld.compile.dumpCodeDir";
 
 // Default values of each key
-pub const DEFAULT_MEMORY_LIMIT: i64 = 1000000000;
+pub const DEFAULT_MEMORY_LIMIT: i64 = 10000000000;
 pub const DEFAULT_THREADS: i32 = 1;
 pub const DEFAULT_SUPPORT_MULTITHREAD: bool = true;
 pub const DEFAULT_SIR_OPT: bool = true;

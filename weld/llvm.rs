@@ -150,7 +150,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     let start = PreciseTime::now();
     if conf.enable_sir_opt {
         info!("Applying SIR optimizations");
-        optimizations::fold_constants::fold_constants(&mut sir_prog)?;
+//        optimizations::fold_constants::fold_constants(&mut sir_prog)?;
     }
     let end = PreciseTime::now();
     debug!("Optimized SIR program:\n{}\n", &sir_prog);
@@ -2234,9 +2234,9 @@ impl LlvmGenerator {
     /// Generate code for a single statement, appending it to the code in a FunctionContext.
     fn gen_statement(&mut self, statement: &Statement, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
         let ref output = statement.output.clone().unwrap_or(Symbol::new("unused", 0));
-        ctx.code.add(format!("; {}", statement));
+        ctx.code.add(format!("; [F{}] {}", func.id, statement));
         if self.trace_run {
-            self.gen_puts(&format!("  {}", statement), ctx);
+            self.gen_puts(&format!(" [F{}]  {}", func.id, statement), ctx);
         }
         match statement.kind {
             MakeStruct(ref elems) => {
@@ -3184,7 +3184,7 @@ impl LlvmGenerator {
                       -> WeldResult<()> {
         ctx.code.add(format!("; {}", terminator));
         if self.trace_run {
-            self.gen_puts(&format!("  {}", terminator), ctx);
+            self.gen_puts(&format!(" [F{}] {}", func.id, terminator), ctx);
         }
         match *terminator {
             Branch { ref cond, on_true, on_false } => {

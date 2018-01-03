@@ -269,3 +269,23 @@ fn symbol_usage_count(sym: &Symbol, expr: &Expr<Type>) -> u32 {
 
     usage_count
 }
+
+
+pub fn inline_let_getfield(expr: &mut TypedExpr) {
+    expr.transform_up(&mut |ref mut expr| {
+        match expr.kind {
+            Let { ref name, ref value, ref body } => {
+                if let GetField { expr: ref struct_expr, .. } = value.kind {
+                    if let Ident(_) = struct_expr.kind {
+                        let mut new_body = body.as_ref().clone();
+                        let ref new_expr = value.as_ref().clone();
+                        new_body.substitute(name, new_expr);
+                        return Some(new_body);
+                    }
+                }
+                return None;
+            },
+            _ => None,
+        }
+    });
+}

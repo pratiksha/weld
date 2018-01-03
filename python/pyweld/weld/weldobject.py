@@ -157,7 +157,6 @@ class WeldObject(object):
     def evaluate(self, restype, verbose=True, decode=True, passes=None, num_threads=1):
         function = self.to_weld_func()
 
-        #print function
         #cweld.weld_set_log_level(cweld.WeldLogLevelDebug)
 
         # Returns a wrapped ctypes Structure
@@ -204,6 +203,9 @@ class WeldObject(object):
             if passes != "":
                 conf.set("weld.optimization.passes", passes)
 
+#        conf.set("weld.compile.dumpCode", "true")
+#        conf.set("weld.compile.traceExecution", "true")
+                
         module = cweld.WeldModule(function, conf, err)
         if err.code() != 0:
             raise ValueError("Could not compile function {}: {}".format(
@@ -216,8 +218,8 @@ class WeldObject(object):
         conf = cweld.WeldConf()
         conf.set("weld.threads", str(num_threads))
         conf.set("weld.memory.limit", "100000000000")
-        conf.set("weld.optimization.applyExperimentalTransforms",
-                 "true" if apply_experimental_transforms else "false")
+#        conf.set("weld.optimization.applyExperimentalTransforms",
+#                 "true" if apply_experimental_transforms else "false")
         err = cweld.WeldError()
         weld_ret = module.run(conf, arg, err)
         if err.code() != 0:
