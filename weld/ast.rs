@@ -432,7 +432,7 @@ impl<T: TypeBounds> ExprKind<T> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum LiteralKind {
     BoolLiteral(bool),
     I8Literal(i8),
@@ -447,6 +447,7 @@ pub enum LiteralKind {
     F32Literal(u32),
     // stored as raw bits.
     F64Literal(u64),
+    StringLiteral(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -137,9 +137,9 @@ fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHa
                         false 
                     }
                 }
-                BinOp { ref op, ref left, ref right } if values.contains_key(left) && values.contains_key(right) => {
-                    let left_val = *values.get(left).unwrap();
-                    let right_val = *values.get(right).unwrap();
+                BinOp { ref op, ref left, ref right } if (&values).contains_key(left) && (&values).contains_key(right) => {
+                    let left_val = (*values.get(left).unwrap()).clone();
+                    let right_val = (*values.get(right).unwrap()).clone();
                     // If this throws an error, it just means that we don't support evaluating the
                     // expression right now.
                     if let Ok(result) = evaluate_binop(*op, left_val, right_val) {
