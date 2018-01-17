@@ -11,6 +11,7 @@ use ast::Type::*;
 use cost_params::*;
 use error::*;
 use exprs;
+use pretty_print::*;
 use util::SymbolGenerator;
 
 use super::predication::*;
@@ -21,6 +22,8 @@ use parser::*;
 use type_inference::*;
 
 use pretty_print::*;
+
+const COST_MODEL_SYM: &str = "weld_rt_cost_model";
 
 /// Merge 1 or 0 based on the value of cond.
 fn generate_measurement_func(cond: &Expr<Type>,
@@ -369,9 +372,23 @@ pub fn generate_measurement_branch(e: &mut Expr<Type>) {
 
                     // TODO handle None
                     //print!("branched cost\n");
-                    let branched_cost = load_cost(func, &sel_ident, false)?.unwrap();
+                    let str_func = exprs::literal_expr(LiteralKind::StringLiteral(print_expr_without_indent(func)))?;
+
+                    let branched_cost = exprs::cudf_expr(COST_MODEL_SYM.to_string(),
+                                                         vec![sel_ident.clone(),
+                                                              str_func.clone(),
+                                                              exprs::literal_expr(
+                                                                  LiteralKind::BoolLiteral(false))?],
+                                                         Scalar(ScalarKind::F64))?;
+                    //let branched_cost = load_cost(func, &sel_ident, false)?.unwrap();
                     //print!("load cost\n");
-                    let pred_cost = load_cost(func, &sel_ident, true)?.unwrap();
+                    let pred_cost = exprs::cudf_expr(COST_MODEL_SYM.to_string(),
+                                                     vec![sel_ident.clone(),
+                                                          str_func.clone(),
+                                                          exprs::literal_expr(
+                                                              LiteralKind::BoolLiteral(true))?],
+                                                     Scalar(ScalarKind::F64))?;
+                    //let pred_cost = load_cost(func, &sel_ident, true)?.unwrap();
 
                     //print!("calling predicate! {}\n", print_expr(e));
                     let pred_body = generate_predicated_expr(body)?.unwrap();

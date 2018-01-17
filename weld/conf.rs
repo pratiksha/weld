@@ -33,7 +33,8 @@ pub const DEFAULT_EXPERIMENTAL_PASSES: bool = false;
 
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "inline-literals", "unroll-structs", "predicate", "short-circuit-booleans", "vectorize", "fix-iterate"];
+        //let m = ["loop-fusion", "unroll-static-loop", "infer-size", "inline-literals", "unroll-structs", "predicate", "short-circuit-booleans", "vectorize", "fix-iterate"];
+        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "inline-literals", "unroll-structs", "inline-let", "inline-let-getfield", "measurement", "inline-let", "inline-let-getfield", "vectorize", "short-circuit-booleans"];
         m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
     };
     pub static ref DEFAULT_DUMP_CODE_DIR: PathBuf = Path::new(".").to_path_buf();
