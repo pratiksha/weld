@@ -135,12 +135,19 @@ pub struct WeldVec<T> {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn weld_rt_cost_model(selectivity: f64, branched: *const WeldVec<u8>, vectorized: bool) ->
-    WeldResult<f64> {
-        let result = (*branched).clone();
-        let branched_str = str::from_utf8(slice::from_raw_parts(result.data, result.len as usize)).unwrap();
-        let mut branched_prog = parse_expr(branched_str).unwrap();
-        infer_types(&mut branched_prog)?;
-        let cost = load_cost(&branched_prog.to_typed()?, selectivity, vectorized)?;
-        Ok(cost.unwrap())
+pub unsafe extern "C" fn weld_rt_cost_model(selectivity: *const f64, branched: *const WeldVec<u8>, vectorized: *const bool, result: *mut f64)  {
+    let selectivity_ = (*selectivity).clone();
+    let prog_text = (*branched).clone();
+    let vectorized_ = (*vectorized).clone();
+    
+    let branched_str = str::from_utf8(slice::from_raw_parts(prog_text.data, prog_text.len as usize)).unwrap();
+    let mut branched_prog = parse_expr(branched_str).unwrap();
+    match infer_types(&mut branched_prog)
+    {
+        Ok(_) => {},
+        Err(e) => { println!("{}", e); }
+    };
+    
+    let cost = load_cost(&branched_prog.to_typed().unwrap(), selectivity_, vectorized_).unwrap().unwrap();
+    *result = cost;
 }

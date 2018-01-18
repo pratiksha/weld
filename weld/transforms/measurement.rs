@@ -372,7 +372,7 @@ pub fn generate_measurement_branch(e: &mut Expr<Type>) {
 
                     // TODO handle None
                     //print!("branched cost\n");
-                    let str_func = exprs::literal_expr(LiteralKind::StringLiteral(print_expr_without_indent(func)))?;
+                    let str_func = exprs::literal_expr(LiteralKind::StringLiteral(print_typed_expr_without_indent(func)))?;
 
                     let branched_cost = exprs::cudf_expr(COST_MODEL_SYM.to_string(),
                                                          vec![sel_ident.clone(),
