@@ -32,4 +32,8 @@ fn main() {
     // Link the weldrt C++ library
     println!("cargo:rustc-link-lib=static=weldrt");
     println!("cargo:rustc-link-search=native={}/weld_rt/cpp", project_dir);
+
+    // Dependency for clamor
+    println!("cargo:rustc-link-lib=dylib=smalloc");
+    println!("cargo:rustc-link-search=native=/home/pratiksha/dev/gradschool/weld/clamor/smalloc");
 }

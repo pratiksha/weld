@@ -11,6 +11,7 @@
 #include <exception>
 #include "assert.h"
 #include "runtime.h"
+#include "smalloc/smalloc.h"
 
 // These is needed to ensure each grain size is divisible by the SIMD vector size. A value of 64
 // should be sufficiently high enough to protect against all the common vector lengths (4, 8,
@@ -499,7 +500,7 @@ extern "C" void *weld_run_malloc(int64_t run_id, size_t size) {
     return NULL;
   }
   rd->cur_mem += size;
-  void *mem = malloc(size);
+  void *mem = smalloc(size);
   rd->allocs[reinterpret_cast<intptr_t>(mem)] = size;
   pthread_mutex_unlock(&rd->lock);
   return mem;
@@ -518,7 +519,7 @@ extern "C" void *weld_run_realloc(int64_t run_id, void *data, size_t size) {
   rd->cur_mem -= orig_size;
   rd->allocs.erase(reinterpret_cast<intptr_t>(data));
   rd->cur_mem += size;
-  void *mem = realloc(data, size);
+  void *mem = srealloc(data, size);
   rd->allocs[reinterpret_cast<intptr_t>(mem)] = size;
   pthread_mutex_unlock(&rd->lock);
   return mem;
