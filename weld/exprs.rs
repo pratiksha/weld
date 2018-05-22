@@ -40,6 +40,10 @@ pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr<Type>> {
     new_expr(Ident(symbol), ty)
 }
 
+pub fn ident_from_param(param: Parameter<Type>) -> WeldResult<Expr<Type>> {
+    new_expr(Ident(param.name), param.ty)
+}
+
 pub fn binop_expr(kind: BinOpKind, left: Expr<Type>, right: Expr<Type>) -> WeldResult<Expr<Type>> {
     if left.ty != right.ty {
         compile_err!("Internal error: Mismatched types in binop_expr")
@@ -111,15 +115,6 @@ pub fn makevector_expr(exprs: Vec<Expr<Type>>) -> WeldResult<Expr<Type>> {
     let ty = exprs[0].ty.clone();
     if exprs.iter().all(|e| e.ty == ty) {
         new_expr(MakeVector { elems: exprs }, Vector(Box::new(ty)))
-    } else {
-        compile_err!("Internal error: Mismatched types in makevector_expr")
-    }
-}
-
-/// Version of makevector_expr that is compatible with empty vectors.
-pub fn makevector_expr_typed(exprs: Vec<Expr<Type>>, ty: Type) -> WeldResult<Expr<Type>> {
-    if exprs.iter().all(|e| e.ty == ty) {
-        new_expr(MakeVector { elems: exprs }, Vector(Box::new(ty.clone())))
     } else {
         compile_err!("Internal error: Mismatched types in makevector_expr")
     }
@@ -366,6 +361,9 @@ pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr<Type>>) -> WeldResul
                 if let Scalar(ScalarKind::I64) = e.ty {
                     passed = true;
                 }
+            } else {
+                // argument is optional
+                passed = true;
             }
             passed
         }
@@ -388,6 +386,8 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
     for ty in vec_tys.iter() {
         if let Vector(ref elem_ty) = *ty {
             vec_elem_tys.push(*elem_ty.clone())
+        } else {
+            return compile_err!("Internal error: Mismatched types in for_expr - non vector type in iter: {}", print_type(ty));
         }
     }
 
@@ -405,7 +405,7 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
 
         // Check builder.
         if param_0_ty != &builder_ty {
-            return compile_err!("Internal error: Mismatched types in for_expr - function builder type",);
+            return compile_err!("Internal error: Mismatched types in for_expr - function builder type: {} {}", print_type(param_0_ty), print_type(&builder_ty));
         }
 
         // Check the index.
@@ -477,6 +477,8 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
             }
             Merger(ref elem_ty, _) => {
                 if elem_ty.as_ref() != &value.ty {
+                    return compile_err!("Internal error: Mismatched types in merge_expr {} {}",
+                                        print_type(elem_ty.as_ref()), print_type(&value.ty));
                     return err;
                 }
             }
