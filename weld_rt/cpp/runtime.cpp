@@ -12,6 +12,7 @@
 #include "assert.h"
 #include "runtime.h"
 #include "smalloc/smalloc.h"
+#include "smalloc/util.h"
 
 // These is needed to ensure each grain size is divisible by the SIMD vector size. A value of 64
 // should be sufficiently high enough to protect against all the common vector lengths (4, 8,
@@ -530,7 +531,7 @@ extern "C" void weld_run_free(int64_t run_id, void *data) {
   pthread_mutex_lock(&rd->lock);
   rd->cur_mem -= rd->allocs.find(reinterpret_cast<intptr_t>(data))->second;
   rd->allocs.erase(reinterpret_cast<intptr_t>(data));
-  free(data);
+  sfree(data);
   pthread_mutex_unlock(&rd->lock);
 }
 

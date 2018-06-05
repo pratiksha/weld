@@ -32,6 +32,7 @@ use super::sir::Statement;
 use super::sir::StatementKind::*;
 use super::sir::Terminator::*;
 use super::sir::optimizations;
+use super::transforms::distribute;
 use super::transforms::uniquify;
 use super::type_inference;
 use super::util::IdGenerator;
@@ -158,6 +159,8 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
 
     apply_opt_passes(&mut expr, &conf.optimization_passes, stats, conf.enable_experimental_passes)?;
 
+    distribute::distribute(&mut expr, &conf.nworkers);
+    
     let start = PreciseTime::now();
     uniquify::uniquify(&mut expr)?;
     let end = PreciseTime::now();
@@ -1131,6 +1134,7 @@ impl LlvmGenerator {
                 }
             }
             ctx.code.add(format!("for.ser:"));
+            
             let mut body_arg_types = self.get_arg_str(&func.params, "")?;
             body_arg_types.push_str(format!(", i64 0, i64 {}", num_iters_str).as_str());
             ctx.code.add(format!("call void @f{}({}, i32 %cur.tid)", func.id, body_arg_types));
@@ -1362,6 +1366,7 @@ impl LlvmGenerator {
         /* Loop termination condition. 
          * Keeping it the same in nditer, and ensuring "num_iterations" value is set correctly in
          * gen_num_iters_and_fringe_start.*/
+
         let idx_tmp = self.gen_load_var("%cur.idx", "i64", ctx)?;  
         let elem_ty = func.locals.get(&par_for.data_arg).unwrap();
         let idx_cmp = ctx.var_ids.next();
@@ -3592,6 +3597,7 @@ impl LlvmGenerator {
             GetField { ref value, index } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (value_ll_ty, value_ll_sym) = self.llvm_type_and_name(func, value)?;
+
                 let ptr_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
                     ptr_tmp, value_ll_ty, value_ll_ty, value_ll_sym, index));
@@ -4197,6 +4203,26 @@ impl LlvmGenerator {
                     arg_types.push_str(&arg_str);
                 }
                 arg_types.push_str("%work_t* %cur.work");
+
+            // print values in struct
+            if sir.funcs[pf.body].id == 2 {
+                let load_tmp = ctx.var_ids.next();
+                ctx.code.add(format!("{} = load %v2, %v2* %shard", load_tmp));
+                let shard_tmp = ctx.var_ids.next();
+                ctx.code.add(format!("{} = call %s0* @v2.at(%v2 {}, i64 0)",
+                                     shard_tmp, load_tmp));
+                let print_tmp = ctx.var_ids.next();
+                let print_tmp_ = ctx.var_ids.next();
+                ctx.code.add(format!("{} = getelementptr inbounds %s0, %s0* {}, i32 0, i32 0",
+                                     print_tmp, shard_tmp));
+                ctx.code.add(format!("{} = load i64, i64* {}", print_tmp_, print_tmp));
+                let print_tmp2 = ctx.var_ids.next();
+                let print_tmp2_ = ctx.var_ids.next();
+                ctx.code.add(format!("{} = getelementptr inbounds %s0, %s0* {}, i32 0, i32 1",
+                                     print_tmp2, shard_tmp));
+                ctx.code.add(format!("{} = load i64, i64* {}", print_tmp2_, print_tmp2));
+                ctx.code.add(format!("call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([8 x i8], [8 x i8]* @.str3, i32 0, i32 0), i64 {}, i64 {})", &print_tmp_, &print_tmp2_));
+            }
                 ctx.code.add(format!("call void @f{}_wrapper({}, i32 %cur.tid)", pf.body, arg_types));
                 ctx.code.add("br label %body.end");
             }

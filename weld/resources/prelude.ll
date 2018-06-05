@@ -133,6 +133,11 @@ declare void    @weld_rt_gb_merge(i8*, i8*, i32, i8*)
 declare i8*     @weld_rt_gb_result(i8*)
 declare void    @weld_rt_gb_free(i8*)
 
+@.str = private unnamed_addr constant [5 x i8] c">%p\0A\00", align 1
+@.str2 = private unnamed_addr constant [6 x i8] c"!%lu\0A\00", align 1
+@.str3 = private unnamed_addr constant [8 x i8] c"%p %lu\0A\00", align 1
+declare i32 @printf(i8*, ...)
+
 ; Parallel runtime structures
 ; work_t struct in runtime.h
 %work_t = type { i8*, i64, i64, i64, i32, i64*, i64*, i32, i64, void (%work_t*)*, %work_t*, i32, i32, i32 }

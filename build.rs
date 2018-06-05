@@ -3,6 +3,7 @@ use std::process::Command;
 
 fn main() {
     let project_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let clamor_dir = env::var("CLAMOR_HOME").unwrap();
 
     let status = Command::new("make")
         .arg("clean")
@@ -35,5 +36,5 @@ fn main() {
 
     // Dependency for clamor
     println!("cargo:rustc-link-lib=dylib=smalloc");
-    println!("cargo:rustc-link-search=native=/home/pratiksha/dev/gradschool/weld/clamor/smalloc");
+    println!("cargo:rustc-link-search=native={}/smalloc", clamor_dir);
 }

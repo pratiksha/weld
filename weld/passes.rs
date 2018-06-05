@@ -9,6 +9,7 @@ use super::transforms::short_circuit;
 use super::transforms::annotator;
 use super::transforms::vectorizer;
 use super::transforms::unroller;
+use super::transforms::distribute;
 
 use super::expr_hash::*;
 

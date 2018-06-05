@@ -19,6 +19,8 @@ pub const LLVM_OPTIMIZATION_LEVEL_KEY: &'static str = "weld.llvm.optimization.le
 pub const DUMP_CODE_KEY: &'static str = "weld.compile.dumpCode";
 pub const DUMP_CODE_DIR_KEY: &'static str = "weld.compile.dumpCodeDir";
 
+pub const NWORKERS_KEY: &'static str = "weld.distribute.nWorkers";
+
 // Default values of each key
 pub const DEFAULT_MEMORY_LIMIT: i64 = 1000000000;
 pub const DEFAULT_THREADS: i32 = 1;
@@ -29,9 +31,11 @@ pub const DEFAULT_DUMP_CODE: bool = false;
 pub const DEFAULT_TRACE_RUN: bool = false;
 pub const DEFAULT_EXPERIMENTAL_PASSES: bool = false;
 
+pub const DEFAULT_NWORKERS: i32 = 4;
+
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate"];
+        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate", "distribute"];
         m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
     };
     pub static ref DEFAULT_DUMP_CODE_DIR: PathBuf = Path::new(".").to_path_buf();
@@ -54,6 +58,7 @@ pub struct ParsedConf {
     pub optimization_passes: Vec<Pass>,
     pub llvm_optimization_level: u32,
     pub dump_code: DumpCodeConf,
+    pub nworkers: i32
 }
 
 /// Parse a configuration from a WeldConf key-value dictionary.
@@ -103,6 +108,10 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let trace_run = value.map(|s| parse_bool_flag(&s, "Invalid flag for trace.run"))
                       .unwrap_or(Ok(DEFAULT_TRACE_RUN))?;
 
+    let value = get_value(conf, NWORKERS_KEY);
+    let nworkers = value.map(|s| parse_nworkers(&s))
+                      .unwrap_or(Ok(DEFAULT_NWORKERS))?;
+
     Ok(ParsedConf {
         memory_limit: memory_limit,
         threads: threads,
@@ -115,7 +124,8 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
         dump_code: DumpCodeConf {
             enabled: dump_code_enabled,
             dir: dump_code_dir,
-        }
+        },
+        nworkers: nworkers,
     })
 }
 
@@ -139,6 +149,14 @@ fn parse_threads(s: &str) -> WeldResult<i32> {
     match s.parse::<i32>() {
         Ok(v) if v > 0 => Ok(v),
         _ => compile_err!("Invalid number of threads: {}", s),
+    }
+}
+
+/// Parse a number of workers.
+fn parse_nworkers(s: &str) -> WeldResult<i32> {
+    match s.parse::<i32>() {
+        Ok(v) if v > 0 => Ok(v),
+        _ => compile_err!("Invalid number of workers: {}", s),
     }
 }
 

@@ -7,6 +7,7 @@ use annotations::*;
 use ast::*;
 use ast::ExprKind::*;
 use ast::Type::*;
+use conf::ParsedConf;
 use error::*;
 use exprs;
 use pretty_print::*;
@@ -17,7 +18,7 @@ use parser::*;
 #[cfg(test)]
 use type_inference::*;
 
-const SHARD_SYM: &str = "shard";
+const SHARD_SYM: &str = "shard_data";
 const DISPATCH_SYM: &str = "dispatch";
 
 /// Get names and types of all Idents accessed in this computation.
@@ -49,7 +50,7 @@ fn shard_to_args_func(shard_ty: Type,
                       pointer_idents: Vec<Expr<Type>>,
                       ctx: &Expr<Type>) -> WeldResult<(Expr<Type>, Vec<Parameter<Type>>, Type, Expr<Type>)> {
     let mut sym_gen = SymbolGenerator::from_expression(ctx);
-
+    
     let element_param = Parameter {
                           name: sym_gen.new_symbol("e"), /* elements are indices */
                           ty: shard_ty.clone()
@@ -98,7 +99,7 @@ fn shard_to_args_func(shard_ty: Type,
                       element_param.clone()];
 
     let body = exprs::merge_expr(
-        builder.clone(),
+        exprs::ident_from_param(params[0].clone()).unwrap(),
         ret_val.clone()).unwrap();
 
     let func = exprs::lambda_expr(params, body.clone())?;   /* function that generates a struct of the args */
@@ -111,12 +112,12 @@ fn generate_dispatch_func(subprog: &Expr<Type>,
                           body_ty: Type,
                           args_list: &Expr<Type>) -> WeldResult<Expr<Type>> {
     let code = exprs::literal_expr(LiteralKind::StringLiteral(print_typed_expr_without_indent(&subprog)))?;
-
+    
     let dispatch_expr = if let Vector(_) = args_list.ty {
         exprs::cudf_expr(DISPATCH_SYM.to_string(),
                                              vec![code,
-                                                  args_list.clone()], // element is the set of args for this subprogram
-                                             Vector(Box::new(body_ty.clone()))).unwrap()
+                                                  args_list.clone()],
+                                             Vector(Box::new(Vector(Box::new(body_ty.clone()))))).unwrap()
     } else {
         return compile_err!("args of dispatch must be a materialized Vector");
     };
@@ -127,11 +128,12 @@ fn generate_dispatch_func(subprog: &Expr<Type>,
 /// Generate UDF to dispatch RPCs for this function.
 /// Shard data according to number of available workers.
 /// Keep track of variables that aren't sharded, and pass to workers.
-pub fn distribute(expr: &mut Expr<Type>) {
-    let nworkers = exprs::literal_expr(LiteralKind::I32Literal(1)).unwrap();
-    let increment = exprs::literal_expr(LiteralKind::I32Literal(1)).unwrap();
+pub fn distribute(expr: &mut Expr<Type>, nworkers_conf: &i32) {
+    let nworkers = exprs::literal_expr(LiteralKind::I32Literal(nworkers_conf.clone())).unwrap();
+    let increment = exprs::literal_expr(LiteralKind::I64Literal(1)).unwrap();
     
     expr.transform_and_continue_res(&mut |ref mut e| {
+        print!("in distribute: {}\n", print_expr(&e));
         if let For { ref iters, ref builder, ref func } = e.kind {
             let mut len_exprs = vec![]; // lengths of each iter in For, for sharding. Should all be equal
             let mut iter_idents = vec![]; // Idents for each iter
@@ -195,7 +197,8 @@ pub fn distribute(expr: &mut Expr<Type>) {
             let args_loop = exprs::for_expr(vec![shards_iter],
                                             args_builder.clone(),
                                             slice_function, false).unwrap();
-            let args_res = exprs::result_expr(args_loop).unwrap();
+            let shard_let = exprs::let_expr(shard_name, shard_expr, args_loop).unwrap();
+            let args_res = exprs::result_expr(shard_let).unwrap();
             
             print!("generating subprog\n");
             /* create Lambda for subprogram */
@@ -216,7 +219,8 @@ pub fn distribute(expr: &mut Expr<Type>) {
                                      kind: IterKind::ScalarIter,
                                      strides: None,
                                      shape: None };
-                // Create new params for the loop.
+
+            // Create new params for the loop.
             let params = vec![Parameter { name: sym_gen.new_symbol("b"),
                                           ty: builder.ty.clone(),
             },
@@ -226,14 +230,19 @@ pub fn distribute(expr: &mut Expr<Type>) {
                               },
                               Parameter {
                                   name: sym_gen.new_symbol("e"),
-                                  ty: subprog_body.ty.clone(), // result of dispatch will be vec of evaluations of subprogram
+                                  ty: Vector(Box::new(subprog_body.ty.clone())), // result of dispatch will be vec of single evaluation of subprogram
                               }];
-            let merge_expr = exprs::merge_expr((**builder).clone(), exprs::ident_from_param(params[2].clone()).unwrap()).unwrap();
+            let merge_expr = exprs::merge_expr(
+                exprs::ident_from_param(params[0].clone()).unwrap(),
+                exprs::lookup_expr(exprs::ident_from_param(params[2].clone()).unwrap(),
+                                   exprs::literal_expr(LiteralKind::I64Literal(0)).unwrap())
+                    .unwrap()).unwrap();
+            let merge_func = exprs::lambda_expr(params, merge_expr).unwrap();
             
             let loop_expr = exprs::for_expr(vec![result_iter],
                                             (**builder).clone(),
-                                            merge_expr, false).unwrap(); 
-            print!("returning loop...\n");
+                                            merge_func, false).unwrap(); 
+            print!("returning loop... {}\n", print_expr(&loop_expr));
             return Ok((Some(loop_expr), false));
         } else { // abort
             print!("Not distributing: not a For\n");
@@ -253,7 +262,8 @@ fn typed_expr(code: &str) -> TypedExpr {
 
 #[test]
 fn distribute_test() {
-    let code = "|z:i32, x:vec[i32], y:vec[i32]| result(for(zip(x, y), merger[i32, +], |b,i,e|merge(b, e.$0 + z)))";
+    //let code = "|z:i32, x:vec[i32], y:vec[i32]| result(for(zip(x, y), merger[i32, +], |b,i,e|merge(b, e.$0 + z)))";
+    let code = "|x:vec[i32]| result(for(x, merger[i32, +], |b,i,e|merge(b, e)))";
     let mut e = typed_expr(code);
     distribute(&mut e);
     print!("{}\n", print_typed_expr(&e));
