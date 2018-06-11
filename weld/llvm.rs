@@ -159,7 +159,9 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
 
     apply_opt_passes(&mut expr, &conf.optimization_passes, stats, conf.enable_experimental_passes)?;
 
-    distribute::distribute(&mut expr, &conf.nworkers);
+    if conf.distribute {
+        distribute::distribute(&mut expr, &conf.nworkers);
+    }
     
     let start = PreciseTime::now();
     uniquify::uniquify(&mut expr)?;

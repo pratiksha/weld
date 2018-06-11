@@ -19,6 +19,7 @@ pub const LLVM_OPTIMIZATION_LEVEL_KEY: &'static str = "weld.llvm.optimization.le
 pub const DUMP_CODE_KEY: &'static str = "weld.compile.dumpCode";
 pub const DUMP_CODE_DIR_KEY: &'static str = "weld.compile.dumpCodeDir";
 
+pub const DISTRIBUTE_KEY: &'static str = "weld.distribute";
 pub const NWORKERS_KEY: &'static str = "weld.distribute.nWorkers";
 
 // Default values of each key
@@ -31,11 +32,12 @@ pub const DEFAULT_DUMP_CODE: bool = false;
 pub const DEFAULT_TRACE_RUN: bool = false;
 pub const DEFAULT_EXPERIMENTAL_PASSES: bool = false;
 
+pub const DEFAULT_DISTRIBUTE: bool = false;
 pub const DEFAULT_NWORKERS: i32 = 4;
 
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate", "distribute"];
+        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate"];
         m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
     };
     pub static ref DEFAULT_DUMP_CODE_DIR: PathBuf = Path::new(".").to_path_buf();
@@ -58,6 +60,7 @@ pub struct ParsedConf {
     pub optimization_passes: Vec<Pass>,
     pub llvm_optimization_level: u32,
     pub dump_code: DumpCodeConf,
+    pub distribute: bool,
     pub nworkers: i32
 }
 
@@ -108,6 +111,10 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let trace_run = value.map(|s| parse_bool_flag(&s, "Invalid flag for trace.run"))
                       .unwrap_or(Ok(DEFAULT_TRACE_RUN))?;
 
+    let value = get_value(conf, DISTRIBUTE_KEY);
+    let distribute_enabled = value.map(|s| parse_bool_flag(&s, "Invalid flag for distribute"))
+                      .unwrap_or(Ok(DEFAULT_DISTRIBUTE))?;
+
     let value = get_value(conf, NWORKERS_KEY);
     let nworkers = value.map(|s| parse_nworkers(&s))
                       .unwrap_or(Ok(DEFAULT_NWORKERS))?;
@@ -125,6 +132,7 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
             enabled: dump_code_enabled,
             dir: dump_code_dir,
         },
+        distribute: distribute_enabled,
         nworkers: nworkers,
     })
 }
