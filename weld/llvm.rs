@@ -4205,26 +4205,6 @@ impl LlvmGenerator {
                     arg_types.push_str(&arg_str);
                 }
                 arg_types.push_str("%work_t* %cur.work");
-
-            // print values in struct
-            if sir.funcs[pf.body].id == 2 {
-                let load_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = load %v2, %v2* %shard", load_tmp));
-                let shard_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = call %s0* @v2.at(%v2 {}, i64 0)",
-                                     shard_tmp, load_tmp));
-                let print_tmp = ctx.var_ids.next();
-                let print_tmp_ = ctx.var_ids.next();
-                ctx.code.add(format!("{} = getelementptr inbounds %s0, %s0* {}, i32 0, i32 0",
-                                     print_tmp, shard_tmp));
-                ctx.code.add(format!("{} = load i64, i64* {}", print_tmp_, print_tmp));
-                let print_tmp2 = ctx.var_ids.next();
-                let print_tmp2_ = ctx.var_ids.next();
-                ctx.code.add(format!("{} = getelementptr inbounds %s0, %s0* {}, i32 0, i32 1",
-                                     print_tmp2, shard_tmp));
-                ctx.code.add(format!("{} = load i64, i64* {}", print_tmp2_, print_tmp2));
-                ctx.code.add(format!("call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([8 x i8], [8 x i8]* @.str3, i32 0, i32 0), i64 {}, i64 {})", &print_tmp_, &print_tmp2_));
-            }
                 ctx.code.add(format!("call void @f{}_wrapper({}, i32 %cur.tid)", pf.body, arg_types));
                 ctx.code.add("br label %body.end");
             }
