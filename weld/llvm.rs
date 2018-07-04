@@ -4316,7 +4316,8 @@ impl LlvmGenerator {
     /// Note that unlike StringLiteral constants, gen_puts generates a null-terminated string.
     fn gen_puts(&mut self, text: &str, ctx: &mut FunctionContext) {
         let global = self.prelude_var_ids.next().replace("%", "@");
-        let text = text.replace("\\", "\\\\").replace("\"", "\\\"");
+        //let text = text.replace("\\", "\\\\").replace("\"", "\\\"");
+        let text = text.replace("\\", "\\\\").replace("\"", "");
         let len = text.len() + 1;
         self.prelude_code.add(format!(
             "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"",
