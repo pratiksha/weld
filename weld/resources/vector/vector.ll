@@ -128,6 +128,7 @@ define %{NAME} @{NAME}.slice(%{NAME} %vec, i64 %index, i64 %size) {{
   %newElements = getelementptr {ELEM}, {ELEM}* %elements, i64 %index
   %1 = insertvalue %{NAME} undef, {ELEM}* %newElements, 0
   %2 = insertvalue %{NAME} %1, i64 %finSize, 1
+  call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([8 x i8], [8 x i8]* @.str3, i32 0, i32 0), {ELEM}* %elements, i64 %index)
   call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([8 x i8], [8 x i8]* @.str3, i32 0, i32 0), {ELEM}* %newElements, i64 %finSize)
 
   ret %{NAME} %2

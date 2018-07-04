@@ -85,7 +85,8 @@ fn shard_to_args_func(shard_ty: Type,
     }
     
 
-    let ret_val = exprs::makestruct_expr(struct_vec).unwrap(); /* make a struct of all args */
+    let ret_struct = exprs::makestruct_expr(struct_vec).unwrap(); /* make a struct of all args */
+    let ret_val = exprs::makevector_expr(vec![ret_struct]).unwrap(); /* make a vec to hold pointer */
     let builder = exprs::newbuilder_expr(BuilderKind::Appender(Box::new(ret_val.ty.clone())),
                                          None).unwrap();
     // Create new params for the loop.
@@ -265,6 +266,6 @@ fn distribute_test() {
     //let code = "|z:i32, x:vec[i32], y:vec[i32]| result(for(zip(x, y), merger[i32, +], |b,i,e|merge(b, e.$0 + z)))";
     let code = "|x:vec[i32]| result(for(x, merger[i32, +], |b,i,e|merge(b, e)))";
     let mut e = typed_expr(code);
-    distribute(&mut e);
+    distribute(&mut e, &1);
     print!("{}\n", print_typed_expr(&e));
 }
