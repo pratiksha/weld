@@ -199,7 +199,10 @@ class WeldObject(object):
             passes = ",".join(passes)
             passes = passes.strip()
             if passes != "":
-                conf.set("weld.optimization.passes", passes)
+               conf.set("weld.optimization.passes", passes)
+        conf.set("weld.optimization.passes", "loop-fusion,unroll-static-loop,infer-size,short-circuit-booleans,fix-iterate");
+        conf.set("weld.distribute", "true")
+        conf.set("weld.distribute.nWorkers", "2")
 
         module = cweld.WeldModule(function, conf, err)
         if err.code() != 0:
