@@ -36,6 +36,22 @@ pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
              })
 }
 
+pub fn zero_i32_literal() -> WeldResult<Expr<Type>> {
+    literal_expr(LiteralKind::I32Literal(0))
+}
+
+pub fn zero_i64_literal() -> WeldResult<Expr<Type>> {
+    literal_expr(LiteralKind::I64Literal(0))
+}
+
+pub fn one_i32_literal() -> WeldResult<Expr<Type>> {
+    literal_expr(LiteralKind::I32Literal(1))
+}
+
+pub fn one_i64_literal() -> WeldResult<Expr<Type>> {
+    literal_expr(LiteralKind::I64Literal(1))
+}
+
 pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr<Type>> {
     new_expr(Ident(symbol), ty)
 }
@@ -133,7 +149,7 @@ pub fn getfield_expr(expr: Expr<Type>, index: u32) -> WeldResult<Expr<Type>> {
     let ty = if let Struct(ref tys) = expr.ty {
         tys[index as usize].clone()
     } else {
-        return compile_err!("Internal error: Mismatched types in getfield_expr");
+        return compile_err!("Internal error: Mismatched types in getfield_expr: {}", print_type(&expr.ty));
     };
     new_expr(GetField {
                  expr: Box::new(expr),
@@ -423,7 +439,8 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
                 if let Scalar(ref sk) = vec_elem_tys[0] {
                     Simd(sk.clone())
                 } else {
-                    return compile_err!("Internal error: Mismatched types in for_expr - bad vector",);
+                    return compile_err!("Internal error: Mismatched types in for_expr - bad vector {}",
+                                        print_type(&vec_elem_tys[0]));
                 }
             } else {
                 vec_elem_tys[0].clone()
@@ -472,12 +489,13 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
         match *bk {
             Appender(ref elem_ty) => {
                 if elem_ty.as_ref() != &value.ty {
-                    return err;
+                    return compile_err!("Internal error: Mismatched types in merge_expr (appender) {} {}",
+                                        print_type(elem_ty.as_ref()), print_type(&value.ty));
                 }
             }
             Merger(ref elem_ty, _) => {
                 if elem_ty.as_ref() != &value.ty {
-                    return compile_err!("Internal error: Mismatched types in merge_expr {} {}",
+                    return compile_err!("Internal error: Mismatched types in merge_expr (merger) {} {}",
                                         print_type(elem_ty.as_ref()), print_type(&value.ty));
                     return err;
                 }

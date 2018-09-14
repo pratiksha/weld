@@ -15,6 +15,7 @@ pub enum AnnotationKind {
     LoopSize,
     BranchSelectivity,
     NumKeys,
+    Sharded, // indicates whether a vec[vec[T]] is a vector of shards
 }
 
 impl fmt::Display for AnnotationKind {
@@ -31,6 +32,7 @@ impl fmt::Display for AnnotationKind {
                    AnnotationKind::Predicate => "predicate",
                    AnnotationKind::Vectorize => "vectorize",
                    AnnotationKind::AlwaysUseRuntime => "always_use_runtime",
+                   AnnotationKind::Sharded => "sharded",
                })
     }
 }
@@ -66,6 +68,7 @@ enum AnnotationValue {
     VPredicate,
     VVectorize,
     VAlwaysUseRuntime,
+    VSharded,
 }
 
 impl fmt::Display for AnnotationValue {
@@ -83,6 +86,7 @@ impl fmt::Display for AnnotationValue {
                    AnnotationValue::VPredicate => "true".to_string(),
                    AnnotationValue::VVectorize => "true".to_string(),
                    AnnotationValue::VAlwaysUseRuntime => "true".to_string(),
+                   AnnotationValue::VSharded => "true".to_string(),
                })
     }
 }
@@ -223,6 +227,18 @@ impl Annotations {
             self.values.insert(AnnotationKind::AlwaysUseRuntime, AnnotationValue::VAlwaysUseRuntime);
         } else {
             self.values.remove(&AnnotationKind::AlwaysUseRuntime);
+        }
+    }
+
+    pub fn sharded(&self) -> bool {
+        return self.values.contains_key(&AnnotationKind::Sharded);
+    }
+
+    pub fn set_sharded(&mut self, val: bool) {
+        if val {
+            self.values.insert(AnnotationKind::Sharded, AnnotationValue::VSharded);
+        } else {
+            self.values.remove(&AnnotationKind::Sharded);
         }
     }
 

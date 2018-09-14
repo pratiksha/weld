@@ -930,6 +930,16 @@ impl<T: TypeBounds> Expr<T> {
         }
     }
 
+    /// Run a closure on this expression and every child, in pre-order.
+    pub fn traverse_mut<F>(&mut self, func: &mut F)
+        where F: FnMut(&mut Expr<T>) -> ()
+    {
+        func(self);
+        for c in self.children_mut() {
+            c.traverse_mut(func);
+        }
+    }
+
     /// Returns `true` if this expression contains the symbol `sym` in an `Ident`.
     pub fn contains_symbol(&self, sym: &Symbol) -> bool {
         let mut found = false;
