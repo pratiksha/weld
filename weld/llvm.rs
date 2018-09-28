@@ -32,7 +32,7 @@ use super::sir::Statement;
 use super::sir::StatementKind::*;
 use super::sir::Terminator::*;
 use super::sir::optimizations;
-use super::transforms::distribute;
+use super::transforms::distribute::distribute;
 use super::transforms::uniquify;
 use super::type_inference;
 use super::util::IdGenerator;
@@ -3175,26 +3175,53 @@ impl LlvmGenerator {
             CUDF { ref symbol_name, ref args } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 if !self.cudf_names.contains(symbol_name) {
-                    let mut arg_tys = vec![];
-                    for ref arg in args {
-                        arg_tys.push(format!("{}*", self.llvm_type(func.symbol_type(arg)?)?));
-                    }
-                    arg_tys.push(format!("{}*", &output_ll_ty));
-                    let arg_sig = arg_tys.join(", ");
-                    self.prelude_code.add(format!("declare void @{}({});", symbol_name, arg_sig));
+                    self.prelude_code.add(format!("declare void @{}(i8*, i8*);", symbol_name));
                     self.cudf_names.insert(symbol_name.clone());
                 }
 
-                // Prepare the parameter list for the function
-                let mut arg_tys = vec![];
-                for ref arg in args {
-                    let (arg_ll_ty, arg_ll_sym) = self.llvm_type_and_name(func, arg)?;
-                    arg_tys.push(format!("{}* {}", arg_ll_ty, arg_ll_sym));
+                // Prepare the parameter list for the function.
+                // Create a struct so we can bitcast it to an i8* before passing it to the UDF.
+                let mut cur_struct = "undef".to_string();
+                let (arg_types, arg_syms): (Vec<String>, Vec<String>) = args.iter().map(|e| self.llvm_type_and_name(func, e).unwrap()).unzip();
+                let final_ty = self.llvm_type(&Struct(args.iter().map(|e| (*func.symbol_type(&e).unwrap()).clone()).collect()))?.to_string();
+                for (i, (arg_ll_ty, arg_ll_sym)) in arg_types.iter().zip(arg_syms).enumerate() {
+                    let new_struct = ctx.var_ids.next();
+                    let loaded_var = self.gen_load_var(&arg_ll_sym, &arg_ll_ty, ctx)?;
+                    ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
+                                         new_struct, final_ty, cur_struct, arg_ll_ty, loaded_var, i));
+                    cur_struct = new_struct;
                 }
-                arg_tys.push(format!("{}* {}", &output_ll_ty, &output_ll_sym));
-                let parameters = arg_tys.join(", ");
-                ctx.code.add(format!("call void @{}({})", symbol_name, parameters));
-            }
+                let struct_size_ptr = ctx.var_ids.next();
+                let struct_size = ctx.var_ids.next();
+                let struct_storage = ctx.var_ids.next();
+                let struct_storage_typed = ctx.var_ids.next();
+                ctx.code.add(format!("{} = getelementptr inbounds {}, {}* null, i32 1", struct_size_ptr, final_ty, final_ty));
+                ctx.code.add(format!("{} = ptrtoint {}* {} to i64", struct_size, final_ty, struct_size_ptr));
+
+                // use weld_run_malloc so that we allocate the arguments struct in the shared address space
+                let run_id = ctx.var_ids.next();
+                ctx.code.add(format!("{} = call i64 @weld_rt_get_run_id()", run_id));
+
+                ctx.code.add(format!("{} = call i8* @weld_run_malloc(i64 {}, i64 {})", struct_storage, run_id, struct_size));
+                ctx.code.add(format!("{} = bitcast i8* {} to {}*", struct_storage_typed, struct_storage, final_ty));
+                ctx.code.add(format!("store {} {}, {}* {}", final_ty, cur_struct, final_ty, struct_storage_typed));
+                
+                // Cast the input struct to an i8*.
+                let input_ptr = ctx.var_ids.next();
+                ctx.code.add(format!("{} = bitcast {}* {} to i8*",
+                                     input_ptr,
+                                     final_ty,
+                                     struct_storage_typed));
+
+                let cast_ptr = ctx.var_ids.next();
+                ctx.code.add(format!("{} = bitcast {}* {} to i8*",
+                                     cast_ptr,
+                                     output_ll_ty,
+                                     output_ll_sym));
+
+                // Call the function using the i8* argument and i8* result.
+                ctx.code.add(format!("call void @{}(i8* {}, i8* {})", symbol_name, input_ptr, cast_ptr)); 
+           }
 
             MakeVector(ref elems) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
@@ -3379,6 +3406,7 @@ impl LlvmGenerator {
                         ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
                             res_ptr, output_ll_ty, child_prefix, child_ll_ty,child_tmp, index_tmp));
                         let res_tmp = self.gen_load_var(&res_ptr, &output_ll_ty, ctx)?;
+                        ctx.code.add(format!("call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([5 x i8], [5 x i8]* @.str2, i32 0, i32 0), i32 {})", &res_tmp));
                         self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
                     Dict(_, _) => {

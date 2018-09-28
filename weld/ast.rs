@@ -7,6 +7,8 @@ use std::hash::Hash;
 use super::error::*;
 use super::annotations::*;
 
+use pretty_print::*;
+
 /// A symbol (identifier name); for now these are strings, but we may add some kind of scope ID.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol {
@@ -1012,13 +1014,22 @@ impl<T: TypeBounds> Expr<T> {
         }
     }
 
+    /// Applies a function once to an expression, optionally replacing it with another expression.
+    pub fn transform_once<F>(&mut self, func: &mut F)
+        where F: FnMut(&mut Expr<T>) -> Option<Expr<T>>
+    {
+        if let Some(e) = func(self) {
+            *self = e;
+        }
+    }
+
     /// Recursively transforms an expression in place by running a function first on its children, then on the root
     /// expression itself; this can be more efficient than `transform` for some cases
     pub fn transform_up<F>(&mut self, func: &mut F)
         where F: FnMut(&mut Expr<T>) -> Option<Expr<T>>
     {
         for c in self.children_mut() {
-            c.transform(func);
+            c.transform_up(func);
         }
         if let Some(e) = func(self) {
             *self = e;

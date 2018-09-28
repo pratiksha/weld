@@ -167,11 +167,11 @@ pub fn length_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
 }
 
 pub fn lookup_expr(data: Expr<Type>, index: Expr<Type>) -> WeldResult<Expr<Type>> {
-    let err = compile_err!("Internal error: Mismatched types in lookup_expr");
+    //let err = compile_err!("Internal error: Mismatched types in lookup_expr");
     let ty = if let Vector(ref ty) = data.ty {
         *ty.clone()
     } else {
-        return err;
+        return compile_err!("Internal error: Lookup not performed on a Vector: {}", print_type(&data.ty));
     };
 
     if let Scalar(ScalarKind::I64) = index.ty {
@@ -181,7 +181,7 @@ pub fn lookup_expr(data: Expr<Type>, index: Expr<Type>) -> WeldResult<Expr<Type>
                  },
                  ty)
     } else {
-        err
+        compile_err!("Internal error: Lookup index not an i64 scalar: {}", print_type(&index.ty))
     }
 }
 
@@ -445,10 +445,10 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
             } else {
                 vec_elem_tys[0].clone()
             };
-            if *param_2_ty != elem_ty {
+            /*if *param_2_ty != elem_ty {
                 return compile_err!("Internal error: Mismatched types in for_expr - function elem type {} != {}",
-                                 print_type(param_2_ty), print_type(&elem_ty));
-            }
+                                    print_type(param_2_ty), print_type(&elem_ty));
+            }*/
         } else {
             let composite_ty = if vectorized {
                 let mut vec_elem_tys_simd = vec![];
@@ -465,7 +465,8 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
             };
 
             if *param_2_ty != composite_ty {
-                return compile_err!("Internal error: Mismatched types in for_expr - function zipped elem type",);
+                return compile_err!("Internal error: Mismatched types in for_expr - function zipped elem type {} {}",
+                                    print_type(param_2_ty), print_type(&composite_ty));
             }
         }
 
