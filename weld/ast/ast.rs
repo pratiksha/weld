@@ -1120,7 +1120,7 @@ impl Expr {
         where F: FnMut(&mut Expr) -> Option<Expr>
     {
         for c in self.children_mut() {
-            c.transform(func);
+            c.transform_up(func);
         }
         if let Some(e) = func(self) {
             *self = e;
