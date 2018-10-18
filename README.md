@@ -2,6 +2,8 @@
 
 [![Build Status](https://travis-ci.org/weld-project/weld.svg?branch=master)](https://travis-ci.org/weld-project/weld)
 
+[Documentation](https://www.weld.rs/docs/weld/)
+
 Weld is a language and runtime for improving the performance of data-intensive applications. It optimizes across libraries and functions by expressing the core computations in libraries using a common intermediate representation, and optimizing across each framework.
 
 Modern analytics applications combine multiple functions from different libraries and frameworks to build complex workflows. Even though individual functions can achieve high performance in isolation, the performance of the combined workflow is often an order of magnitude below hardware limits due to extensive data movement across the functions. Weld’s take on solving this problem is to lazily build up a computation for the entire workflow, and then optimizing and evaluating it only when a result is needed.
@@ -20,7 +22,7 @@ You can join the discussion on Weld on our [Google Group](https://groups.google.
 
 ## Building
 
-To build Weld, you need [the latest stable version of Rust](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8 or newer.
+To build Weld, you need [the latest stable version of Rust](http://rust-lang.org) and [LLVM](http://llvm.org) 6.0 or newer.
 
 To install Rust, follow the steps [here](https://rustup.rs). You can verify that Rust was installed correctly on your system by typing `rustc` into your shell. If you already have Rust and  `rustup` installed, you can upgrade to the latest stable version with:
 
@@ -33,36 +35,54 @@ $ rustup update stable
 To install LLVM on macOS, first install [Homebrew](https://brew.sh/). Then:
 
 ```bash
-$ brew install llvm@3.8
+$ brew install llvm@6
 ```
 
-Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up (note that you might need to add `sudo` at the start of this command):
+Weld's dependencies require `llvm-config` on `$PATH`, so you may need to create a symbolic link so the correct `llvm-config` is picked up (note that you might need to add `sudo` at the start of this command):
 
 ```bash
-$ ln -s /usr/local/bin/llvm-config-3.8 /usr/local/bin/llvm-config
+$ ln -s /usr/local/Cellar/llvm/6.0.0/bin/llvm-config /usr/local/bin/llvm-config
 ```
 
-To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x` or newer.
+To make sure this worked correctly, run `llvm-config --version`. You should see `6.0.x`.
 
 Enter the `weld_rt/cpp` directory and try running `make`. If the command fails with errors related to missing header files, you may need to install XCode and/or XCode Command Line Tools. Run `xcode-select --install` to do this.
 
 #### Ubuntu LLVM Installation
 
-To install LLVM on Ubuntu :
+To install LLVM on Ubuntu, get the LLVM 6.0 sources and then `apt-get`:
 
+On Ubuntu 16.04 (Xenial):
 ```bash
-$ sudo apt-get install llvm-3.8
-$ sudo apt-get install llvm-3.8-dev
-$ sudo apt-get install clang-3.8
+wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+sudo apt-add-repository "deb http://apt.llvm.org/xenial/ llvm-toolchain-xenial-6.0 main"
+sudo apt-get update
+sudo apt-get install llvm-6.0-dev clang-6.0
+```
+On Ubuntu 14.04 (Trusty):
+```bash
+wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+sudo apt-add-repository "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-6.0 main"
+
+# gcc backport is required on 14.04, for libstdc++. See https://apt.llvm.org/
+sudo apt-add-repository "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main"
+sudo apt-get update
+sudo apt-get install llvm-6.0-dev clang-6.0
 ```
 
-Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up:
+Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up. `sudo` may be required:
 
 ```bash
-$ ln -s /usr/bin/llvm-config-3.8 /usr/local/bin/llvm-config
+$ ln -s /usr/bin/llvm-config-6.0 /usr/local/bin/llvm-config
 ```
 
-To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x` or newer.
+To make sure this worked correctly, run `llvm-config --version`. You should see `6.0.x` or newer.
+
+You will also need `zlib`:
+
+```bash
+$ sudo apt-get install zlib1g-dev
+```
 
 #### Building Weld
 
@@ -74,14 +94,6 @@ $ cd weld/
 $ export WELD_HOME=`pwd`
 $ cargo build --release
 ```
-
-**Note:** If you are using a version of LLVM newer than 3.8, you will have to change the `llvm-sys` crate dependency in `easy_ll/Cargo.toml` to match (e.g. `40.0.0` for LLVM 4.0.0). You may also need to create additional symlinks for some packages that omit the version suffix when installing the latest version, e.g. for LLVM 4.0:
-
-```bash
-$ ln -s /usr/local/bin/clang /usr/local/bin/clang-4.0
-$ ln -s /usr/local/bin/llvm-link /usr/local/bin/llvm-link-4.0
-```
-
 Weld builds two dynamically linked libraries (`.so` files on Linux and `.dylib` files on Mac): `libweld` and `libweldrt`.
 
 Finally, run the unit and integration tests:
@@ -91,6 +103,8 @@ $ cargo test
 ```
 
 ## Documentation
+
+The [Rust Weld crate](https://crates.io/crates/weld) is documented [here](https://www.weld.rs/docs/weld/).
 
 The `docs/` directory contains documentation for the different components of Weld.
 
