@@ -356,7 +356,10 @@ pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr>) -> WeldResult<Expr
                 if let Scalar(ScalarKind::I64) = e.ty {
                     passed = true;
                 }
-            }
+            } else {
+                // Argument is optional.
+                passed = true;
+            } 
             passed
         }
         _ => expr.is_none(),
