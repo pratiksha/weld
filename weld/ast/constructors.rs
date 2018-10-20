@@ -35,8 +35,28 @@ pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr> {
              })
 }
 
+pub fn zero_i32_literal() -> WeldResult<Expr> {
+    literal_expr(LiteralKind::I32Literal(0))
+}
+
+pub fn zero_i64_literal() -> WeldResult<Expr> {
+    literal_expr(LiteralKind::I64Literal(0))
+}
+
+pub fn one_i32_literal() -> WeldResult<Expr> {
+    literal_expr(LiteralKind::I32Literal(1))
+}
+
+pub fn one_i64_literal() -> WeldResult<Expr> {
+    literal_expr(LiteralKind::I64Literal(1))
+}
+
 pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr> {
     new_expr(Ident(symbol), ty)
+}
+
+pub fn ident_from_param(param: Parameter) -> WeldResult<Expr> {
+    new_expr(Ident(param.name), param.ty)
 }
 
 pub fn binop_expr(kind: BinOpKind, left: Expr, right: Expr) -> WeldResult<Expr> {
@@ -356,6 +376,9 @@ pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr>) -> WeldResult<Expr
                 if let Scalar(ScalarKind::I64) = e.ty {
                     passed = true;
                 }
+            } else {
+                // argument is optional
+                passed = true;
             }
             passed
         }

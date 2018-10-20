@@ -20,6 +20,9 @@ pub const DUMP_CODE_KEY: &'static str = "weld.compile.dumpCode";
 pub const DUMP_CODE_DIR_KEY: &'static str = "weld.compile.dumpCodeDir";
 pub const ENABLE_BOUNDS_CHECKS: &'static str = "weld.compile.enableBoundsChecks";
 
+pub const DISTRIBUTE_KEY: &'static str = "weld.distribute";
+pub const NWORKERS_KEY: &'static str = "weld.distribute.nWorkers";
+
 // Default values of each key
 pub const DEFAULT_MEMORY_LIMIT: i64 = 1000000000;
 pub const DEFAULT_THREADS: i32 = 1;
@@ -30,6 +33,9 @@ pub const DEFAULT_DUMP_CODE: bool = false;
 pub const DEFAULT_TRACE_RUN: bool = false;
 pub const DEFAULT_EXPERIMENTAL_PASSES: bool = false;
 pub const DEFAULT_BOUNDS_CHECKS: bool = false;
+
+pub const DEFAULT_DISTRIBUTE: bool = false;
+pub const DEFAULT_NWORKERS: i32 = 4;
 
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
@@ -59,6 +65,8 @@ pub struct ParsedConf {
     pub llvm_optimization_level: u32,
     pub dump_code: DumpCodeConf,
     pub enable_bounds_checks: bool,
+    pub distribute: bool,
+    pub nworkers: i32,
 }
 
 impl ParsedConf {
@@ -80,6 +88,8 @@ impl ParsedConf {
                 dir: PathBuf::new(),
             },
             enable_bounds_checks: false,
+            distribute: false,
+            nworkers: 1,
         }
     }
 }
@@ -135,6 +145,14 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let enable_bounds_check = value.map(|s| parse_bool_flag(&s, "Invalid flag for enableBoundsChecks"))
                       .unwrap_or(Ok(DEFAULT_BOUNDS_CHECKS))?;
 
+    let value = get_value(conf, DISTRIBUTE_KEY);
+    let distribute_enabled = value.map(|s| parse_bool_flag(&s, "Invalid flag for distribute"))
+                      .unwrap_or(Ok(DEFAULT_DISTRIBUTE))?;
+
+    let value = get_value(conf, NWORKERS_KEY);
+    let nworkers = value.map(|s| parse_nworkers(&s))
+                      .unwrap_or(Ok(DEFAULT_NWORKERS))?;
+
     Ok(ParsedConf {
         memory_limit: memory_limit,
         threads: threads,
@@ -148,7 +166,9 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
         dump_code: DumpCodeConf {
             enabled: dump_code_enabled,
             dir: dump_code_dir,
-        }
+        },
+        distribute: distribute_enabled,
+        nworkers: nworkers,
     })
 }
 
@@ -172,6 +192,14 @@ fn parse_threads(s: &str) -> WeldResult<i32> {
     match s.parse::<i32>() {
         Ok(v) if v > 0 => Ok(v),
         _ => compile_err!("Invalid number of threads: {}", s),
+    }
+}
+
+/// Parse a number of workers.
+fn parse_nworkers(s: &str) -> WeldResult<i32> {
+    match s.parse::<i32>() {
+        Ok(v) if v > 0 => Ok(v),
+        _ => compile_err!("Invalid number of workers: {}", s),
     }
 }
 

@@ -1129,6 +1129,16 @@ impl Expr {
         }
     }
 
+    /// Run a closure on this expression and every child, in pre-order.
+    pub fn traverse_mut<F>(&mut self, func: &mut F)
+        where F: FnMut(&mut Expr) -> ()
+    {
+        func(self);
+        for c in self.children_mut() {
+            c.traverse_mut(func);
+        }
+    }
+    
     /// Returns `true` if this expression contains the symbol `sym` in an `Ident`.
     pub fn contains_symbol(&self, sym: &Symbol) -> bool {
         let mut found = false;
@@ -1201,13 +1211,22 @@ impl Expr {
         }
     }
 
+    /// Applies a function once to an expression, optionally replacing it with another expression.
+    pub fn transform_once<F>(&mut self, func: &mut F)
+        where F: FnMut(&mut Expr) -> Option<Expr>
+    {
+        if let Some(e) = func(self) {
+            *self = e;
+        }
+    }
+
     /// Recursively transforms an expression in place by running a function first on its children, then on the root
     /// expression itself; this can be more efficient than `transform` for some cases
     pub fn transform_up<F>(&mut self, func: &mut F)
         where F: FnMut(&mut Expr) -> Option<Expr>
     {
         for c in self.children_mut() {
-            c.transform(func);
+            c.transform_up(func);
         }
         if let Some(e) = func(self) {
             *self = e;

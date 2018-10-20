@@ -65,7 +65,7 @@ pub trait VectorExt {
                 vector_type: &Type,
                 vec: LLVMValueRef,
                 size: LLVMValueRef,
-                run: LLVMValueRef) -> WeldResult<LLVMValueRef>;
+                         run: LLVMValueRef) -> WeldResult<LLVMValueRef>;
 }
 
 impl VectorExt for LlvmGenerator {

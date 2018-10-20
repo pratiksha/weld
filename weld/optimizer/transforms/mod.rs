@@ -1,5 +1,6 @@
 //! Common transformations on expressions.
 
+pub mod distribute;
 pub mod loop_fusion;
 pub mod loop_fusion_2;
 pub mod inliner;

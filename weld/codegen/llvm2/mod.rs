@@ -1034,21 +1034,42 @@ impl LlvmGenerator {
                 let mut arg_tys = vec![];
 
                 // A CUDF with declaration Name[R](T1, T2, T3) has a signature `void Name(T1, T2, T3, R)`.
+                // The CUDF takes an i8* and outputs an i8*, so we have to pack the args into a struct
+                // and bitcast the struct to i8 before passing to the UDF call.
                 for arg in args.iter() {
                     arg_tys.push(LLVMPointerType(self.llvm_type(context.sir_function.symbol_type(arg)?)?, 0));
                 }
-                arg_tys.push(LLVMPointerType(return_ty, 0));
 
-                let fn_ret_ty = self.void_type();
-                self.intrinsics.add(symbol_name, fn_ret_ty, &mut arg_tys);
+                let final_type = LLVMStructType(arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
+                let run = context.get_run();
+                let size = self.size_of(final_type);
+                let bytes = self.intrinsics.call_weld_run_malloc(context.builder,
+                                                                 run, size, None);
+                let arg_struct_ptr = LLVMBuildBitCast(context.builder, bytes,
+                                                      LLVMPointerType(final_type, 0), c_str!(""));
 
-                let mut arg_values = vec![];
-                for arg in args.iter() {
-                    arg_values.push(context.get_value(arg)?);
+                for (i, arg) in args.iter().enumerate() {
+                    let arg_pointer = LLVMBuildStructGEP(context.builder,
+                                                         arg_struct_ptr,
+                                                         i as u32,
+                                                         c_str!(""));
+                    let value = self.load(context.builder, context.get_value(arg)?)?;
+                    LLVMBuildStore(context.builder, value, arg_pointer);
                 }
 
-                arg_values.push(output_pointer);
-                let _ = self.intrinsics.call(context.builder, symbol_name, &mut arg_values)?;
+                let output_ty = LLVMPointerType(return_ty, 0);
+                let input_cast_ptr = LLVMConstBitCast(arg_struct_ptr, LLVMPointerType(self.i8_type(), 0));
+                let output_cast_ptr = LLVMConstBitCast(output_pointer, LLVMPointerType(self.i8_type(), 0));
+
+                // input and output are i8 pointers
+                let mut i8_tys = vec![LLVMPointerType(self.i8_type(), 0),
+                                      LLVMPointerType(self.i8_type(), 0)]; 
+                    
+                let fn_ret_ty = self.void_type();
+                self.intrinsics.add(symbol_name, fn_ret_ty, &mut i8_tys);
+
+                let mut cast_args = vec![input_cast_ptr, output_cast_ptr];
+                let _ = self.intrinsics.call(context.builder, symbol_name, &mut cast_args)?;
 
                 Ok(())
             }
@@ -1217,6 +1238,7 @@ impl LlvmGenerator {
                 }
             }
             Sort { .. } => {
+                let output_pointer = context.get_value(output)?;
                 unimplemented!() // Sort
             }
             ToVec(ref child) => {
