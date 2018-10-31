@@ -7,12 +7,12 @@ use std::fmt;
 use ast::*;
 use error::*;
 
+use super::transforms::cse;
 use super::transforms::loop_fusion;
 use super::transforms::loop_fusion_2;
 use super::transforms::inliner;
 use super::transforms::size_inference;
 use super::transforms::short_circuit;
-use super::transforms::annotator;
 use super::transforms::vectorizer;
 use super::transforms::unroller;
 
@@ -115,6 +115,10 @@ lazy_static! {
                                 Transformation::new(inliner::inline_cast),
                                 Transformation::new(inliner::simplify_branch_conditions)],
                  "inline-literals"));
+        m.insert("cse",
+                 // Calls inline_let internally.
+                 Pass::new(vec![Transformation::new(cse::common_subexpression_elimination)],
+                 "cse"));
         m.insert("unroll-structs",
                  Pass::new(vec![Transformation::new(inliner::unroll_structs)],
                  "unroll-structs"));
@@ -128,9 +132,6 @@ lazy_static! {
         m.insert("vectorize",
                  Pass::new(vec![Transformation::new(vectorizer::vectorize)],
                  "vectorize"));
-        m.insert("fix-iterate",
-                 Pass::new(vec![Transformation::new(annotator::force_iterate_parallel_fors)],
-                 "fix-iterate"));
         m
     };
 }

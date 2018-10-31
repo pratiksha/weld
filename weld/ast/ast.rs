@@ -1,6 +1,5 @@
 //! Defines the Weld abstract syntax tree.
 
-use annotation::Annotations;
 use error::*;
 use util;
 
@@ -8,14 +7,104 @@ use self::ExprKind::*;
 use self::ScalarKind::*;
 use self::BinOpKind::*;
 
+use std::rc::Rc;
 use std::fmt;
 use std::vec;
+use std::collections::BTreeMap;
 
 #[cfg(test)]
 use tests::*;
 
+/// Name used for placeholder expressions.
+const PLACEHOLDER_NAME: &'static str = "#placeholder";
+
+/// An annotation over a type or expression.
+///
+/// Annotations are unstructured String key-value pairs. They can be added on expressions and
+/// interpreted in different ways by the compiler.
+///
+/// ## Limitations
+///
+/// Currently, the parser is only capable of parsing annotation values that are either identifiers (i.e.,
+/// single-token strings), boolean literals, floating point literals, and signed integer literals.
+/// Keys must be identifiers (i.e., non-numeric, non-boolean strings that are not reserved words).
+///
+/// The annotation system should in theory support arbitrary string key/value pairs: the parser
+/// will eventually be updated to support this.
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
+pub struct Annotations {
+    /// Holds the annotations.
+    ///
+    /// This is wrapped in an option so we don't need to allocate memory in cases where the HashMap
+    /// is empty (which will usually be the case).
+    values: Option<BTreeMap<String, String>>,
+}
+
+impl Annotations {
+    /// Create a new set of empty annotations.
+    pub fn new() -> Annotations {
+        Annotations {
+            values: None,
+        }
+    }
+
+    /// Set an annotation with key associated with value.
+    ///
+    /// The previous value for this key is returned if there was one. 
+    pub fn set<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) -> Option<String> {
+        if self.values.is_none() {
+            self.values = Some(BTreeMap::new());
+        }
+        self.values
+            .as_mut()
+            .unwrap()
+            .insert(key.into(), value.into())
+    }
+
+    /// Get the annotation value associated with a key.
+    ///
+    /// Returns `None` if the key was not found.
+    pub fn get<K: AsRef<str>>(&self, key: K) -> Option<&str> {
+        if self.values.is_none() {
+            return None
+        }
+        self.values
+            .as_ref()
+            .unwrap()
+            .get(key.as_ref())
+            .map(|v| v.as_ref())
+    }
+
+    /// Return whether the annotations are empty.
+    pub fn is_empty(&self) -> bool {
+        self.values.as_ref().map(|f| f.len()).unwrap_or(0) == 0
+    }
+
+    /// Clears the annotations.
+    pub fn clear(&mut self) {
+        self.values = None;
+    }
+}
+
+impl fmt::Display for Annotations {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.values.is_none() {
+            return write!(f, "");
+        }
+
+        // Annotations are always sorted alphabetically (due to BTreeMap's iter).
+        let annotations = self.values.as_ref().unwrap()
+            .iter()
+            .map(|(k, v)| format!("{}:{}", k, v))
+            .collect::<Vec<String>>()
+            .join(",");
+
+        write!(f, "@({})", annotations)
+    }
+}
+
 /// Types in the Weld IR.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub enum Type {
     /// A scalar.
     Scalar(ScalarKind),
@@ -101,6 +190,15 @@ impl Type {
         match *self {
             Scalar(_) => true,
             _ => false
+        }
+    }
+
+    /// Returns whether this `Type` contains a builder.
+    pub fn contains_builder(&self) -> bool {
+        use self::Type::Builder;
+        match *self {
+            Builder(_, _) => true,
+            _ => self.children().any(|t| t.contains_builder()),
         }
     }
 
@@ -398,27 +496,28 @@ impl fmt::Display for BuilderKind {
 /// A named symbol in the Weld AST.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol {
-    pub name: String,
-    pub id: i32,
+    name: Rc<String>,
+    id: i32,
 }
 
 impl Symbol {
-    pub fn new(name: &str, id: i32) -> Symbol {
+    pub fn new<T: Into<String>>(name: T, id: i32) -> Symbol {
         Symbol {
-            name: name.into(),
+            name: Rc::new(name.into()),
             id: id,
         }
     }
 
-    pub fn unused() -> Symbol {
-        Symbol::new("unused", 0)
+    pub fn placeholder() -> Symbol {
+        Symbol::new(PLACEHOLDER_NAME, 0)
     }
 
-    pub fn name(name: &str) -> Symbol {
-        Symbol {
-            name: name.into(),
-            id: 0,
-        }
+    pub fn name(&self) -> String {
+        self.name.to_string()
+    }
+
+    pub fn id(&self) -> i32 {
+        self.id
     }
 }
 
@@ -433,7 +532,7 @@ impl fmt::Display for Symbol {
 }
 
 /// A typed Weld expression tree.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct Expr {
     pub ty: Type,
     pub kind: ExprKind,
@@ -443,7 +542,7 @@ pub struct Expr {
 /// Iterator kinds in the Weld IR.
 ///
 /// An iterator defines how a for loop iterates over data.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone,Debug,Eq,PartialEq,Hash)]
 pub enum IterKind {
     /// A standard scalar iterator.
     ScalarIter,
@@ -480,7 +579,7 @@ impl fmt::Display for IterKind {
 
 /// An iterator, which specifies a vector to iterate over and optionally a start index,
 /// end index, and stride.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct Iter {
     pub data: Box<Expr>,
     pub start: Option<Box<Expr>>,
@@ -507,7 +606,7 @@ impl Iter {
 /// This enumeration defines the operators in the Weld IR. Each operator relies on zero or more
 /// sub-expressions, forming an expression tree. We use the term "expression" to refer to a
 /// particular `ExprKind`.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone,Debug,PartialEq,Hash,Eq)]
 pub enum ExprKind {
     /// A literal expression.
     ///
@@ -555,6 +654,13 @@ pub enum ExprKind {
     /// dictionary, `index` is a key. If the key is not present in the dictionary, this expression
     /// raises a `KeyNotFoundError`.
     Lookup {
+        data: Box<Expr>,
+        index: Box<Expr>,
+    },
+    /// A variant of lookup on dictionaries that does not result in an error.
+    ///
+    /// Returns a `{bool, V}`, where the `bool` indicates whether the value was in the dictionary.
+    OptLookup {
         data: Box<Expr>,
         index: Box<Expr>,
     },
@@ -668,6 +774,7 @@ impl ExprKind {
             GetField { .. } => "GetField",
             Length { .. } => "Length",
             Lookup { .. } => "Lookup",
+            OptLookup { .. } => "OptLookup",
             KeyExists { .. } => "KeyExists",
             Slice { .. } => "Slice",
             Sort { .. } => "Sort",
@@ -879,6 +986,10 @@ impl Expr {
                 ref data,
                 ref index,
             } => vec![data.as_ref(), index.as_ref()],
+            OptLookup {
+                ref data,
+                ref index,
+            } => vec![data.as_ref(), index.as_ref()],
             KeyExists { ref data, ref key } => vec![data.as_ref(), key.as_ref()],
             Slice {
                 ref data,
@@ -979,6 +1090,10 @@ impl Expr {
             GetField { ref mut expr, .. } => vec![expr.as_mut()],
             Length { ref mut data } => vec![data.as_mut()],
             Lookup {
+                ref mut data,
+                ref mut index,
+            } => vec![data.as_mut(), index.as_mut()],
+            OptLookup {
                 ref mut data,
                 ref mut index,
             } => vec![data.as_mut(), index.as_mut()],
@@ -1254,6 +1369,69 @@ pub fn expr_box(kind: ExprKind, annot: Annotations) -> Box<Expr> {
                  kind: kind,
                  annotations: annot,
              })
+}
+
+/// Creates a placeholder expression.
+pub trait Placeholder {
+    /// Returns whether this expression is a placeholder.
+    fn is_placeholder(&self) -> bool;
+
+    /// Create a new placeholder.
+    fn new_placeholder() -> Self;
+}
+
+impl Placeholder for Expr {
+    fn is_placeholder(&self) -> bool {
+        if let Ident(ref name) = self.kind {
+            return name.name.as_ref() == PLACEHOLDER_NAME
+        }
+        return false
+    }
+
+    fn new_placeholder() -> Expr {
+        Expr {
+            ty: Type::Unknown,
+            kind: Ident(Symbol::placeholder()),
+            annotations: Annotations::new()
+        }
+    }
+}
+
+impl Placeholder for Box<Expr> {
+    fn is_placeholder(&self) -> bool {
+        self.as_ref().is_placeholder()
+    }
+
+    fn new_placeholder() -> Box<Expr> {
+        Box::new(Expr {
+            ty: Type::Unknown,
+            kind: Ident(Symbol::placeholder()),
+            annotations: Annotations::new()
+        })
+    }
+}
+
+/// Takes an expression, replacing it with a placeholder.
+pub trait Takeable: Placeholder {
+    fn take(&mut self) -> Self;
+}
+
+impl Takeable for Expr {
+    fn take(&mut self) -> Expr {
+        use std::mem;
+        let mut new = Self::new_placeholder();
+        mem::swap(self, &mut new);
+        new
+    }
+}
+
+impl Takeable for Box<Expr> {
+    fn take(&mut self) -> Box<Expr> {
+        use std::mem;
+        let mut new = Self::new_placeholder();
+        mem::swap(self.as_mut(), new.as_mut());
+        new
+    }
 }
 
 #[test]

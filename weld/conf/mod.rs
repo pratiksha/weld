@@ -39,7 +39,7 @@ pub const DEFAULT_NWORKERS: i32 = 4;
 
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "inline-literals", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate"];
+        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "inline-literals", "cse", "short-circuit-booleans", "predicate", "vectorize"];
         m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
     };
     pub static ref DEFAULT_DUMP_CODE_DIR: PathBuf = Path::new(".").to_path_buf();

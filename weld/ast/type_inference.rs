@@ -13,10 +13,6 @@ use error::*;
 
 use fnv::FnvHashMap;
 
-#[cfg(test)]
-use tests::*;
-#[cfg(test)]
-use annotation::*;
 
 type TypeMap = FnvHashMap<Symbol, Type>;
 type Binding = (Symbol, Option<Type>);
@@ -569,7 +565,6 @@ impl InferTypesInternal for Expr {
                         Ok(changed)
                     }
                     Dict(ref key_type, ref value_type) => {
-                        let mut changed = false;
                         changed |= index.ty.push(key_type)?;
                         changed |= self.ty.push(value_type)?;
                         Ok(changed)
@@ -577,6 +572,29 @@ impl InferTypesInternal for Expr {
                     Unknown => Ok(false),
                     _ => {
                         compile_err!("Expected vector or dict type in lookup, got {}", &data.ty)
+                    }
+                }
+            }
+
+            OptLookup { ref mut data, ref mut index } => {
+                debug!("optlookup type inference: optlookup({}, {}): {}", data.ty, index.ty, self.ty);
+                match data.ty {
+                    Dict(ref key_type, ref value_type) => {
+                        let mut my_type = vec![ Scalar(Bool), value_type.as_ref().clone() ];
+                        let mut changed = false;
+                        changed |= index.ty.push(key_type)?;
+
+                        // Push the value type.
+                        changed |= my_type.get_mut(1).unwrap().push(value_type)?;
+
+                        let ref mut struct_ty = Struct(my_type);
+                        changed |= self.ty.sync(struct_ty)?;
+
+                        Ok(changed)
+                    }
+                    Unknown => Ok(false),
+                    _ => {
+                        compile_err!("Expected dict type in optlookup, got {}", &data.ty)
                     }
                 }
             }
@@ -867,14 +885,12 @@ impl InferTypesInternal for Expr {
 
 #[test]
 fn infer_types_test() {
+    use tests::*;
     let e = parse_expr("a").unwrap();
     assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a:?");
 
     let e = Expr {
-        kind: ExprKind::Ident(Symbol {
-                                  name: "a".to_string(),
-                                  id: 1,
-                              }),
+        kind: ExprKind::Ident(Symbol::new("a", 1)),
         ty: Type::Unknown,
         annotations: Annotations::new(),
     };

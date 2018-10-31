@@ -7,6 +7,7 @@
 extern crate libc;
 extern crate fnv;
 extern crate time;
+extern crate uuid;
 
 use ast::*;
 use ast::ExprKind::*;
@@ -18,6 +19,7 @@ use std::cmp::max;
 use std::io::Write;
 use std::path::PathBuf;
 use std::fs::OpenOptions;
+use uuid::Uuid;
 
 pub mod stats;
 pub mod colors;
@@ -25,6 +27,7 @@ pub mod colors;
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.
 /// Each SymbolGenerator tracks the maximum ID used for every symbol name, and can be used to
 /// create new symbols with the same name but a unique ID.
+#[derive(Debug,Clone)]
 pub struct SymbolGenerator {
     id_map: fnv::FnvHashMap<String, i32>,
 }
@@ -40,8 +43,8 @@ impl SymbolGenerator {
         let mut id_map: fnv::FnvHashMap<String, i32> = fnv::FnvHashMap::default();
 
         let update_id = |id_map: &mut fnv::FnvHashMap<String, i32>, symbol: &Symbol| {
-            let id = id_map.entry(symbol.name.clone()).or_insert(0);
-            *id = max(*id, symbol.id);
+            let id = id_map.entry(symbol.name().clone()).or_insert(0);
+            *id = max(*id, symbol.id());
         };
 
         expr.traverse(&mut |e| match e.kind {
@@ -61,41 +64,7 @@ impl SymbolGenerator {
     pub fn new_symbol(&mut self, name: &str) -> Symbol {
         let id = self.id_map.entry(name.to_owned()).or_insert(-1);
         *id += 1;
-        Symbol {
-            name: name.to_owned(),
-            id: *id,
-        }
-    }
-
-    /// Return the next ID that will be given to a symbol with the given string name.
-    pub fn next_id(&self, name: &str) -> i32 {
-        match self.id_map.get(name) {
-            Some(id) => id + 1,
-            None => 0,
-        }
-    }
-}
-
-/// Utility struct to generate string IDs with a given prefix.
-pub struct IdGenerator {
-    prefix: String,
-    next_id: i32,
-}
-
-impl IdGenerator {
-    /// Initialize an IdGenerator that will begin counting up from 0.
-    pub fn new(prefix: &str) -> IdGenerator {
-        IdGenerator {
-            prefix: String::from(prefix),
-            next_id: 0,
-        }
-    }
-
-    /// Generate a new ID.
-    pub fn next(&mut self) -> String {
-        let res = format!("{}{}", self.prefix, self.next_id);
-        self.next_id += 1;
-        res
+        Symbol::new(name, *id)
     }
 }
 
@@ -114,21 +83,11 @@ pub fn join<T: iter::Iterator<Item = String>>(start: &str, sep: &str, end: &str,
 
 /// Return a timestamp-based filename for `dumpCode`.
 ///
-/// If a Weld file with the produced filename already exists, the filename is uniquified. The
-/// uniquified filename will have a -<num> appended to the filename until a unique number is found.
-pub fn timestamp_unique(dir: &PathBuf) -> String {
-    let mut ext = 0;
-    loop {
-        let suffix = if ext == 0 { String::from("") } else { format!("-{}", ext) };
-        let timestamp = format!("{}{}", time::now().to_timespec().sec, suffix);
-        let ref mut path = dir.clone();
-        path.push(format!("code-{}", &timestamp));
-        path.set_extension("weld");
-        if !path.exists() {
-            return timestamp;
-        }
-        ext += 1;
-    }
+/// The timestamp has a 2-character identifier attached to prevent naming conflicts.
+pub fn timestamp_unique() -> String {
+    let uuid = Uuid::new_v4().to_simple().to_string();
+    let ref suffix = uuid[0..2];
+    format!("{}-{}", time::now().to_timespec().sec, suffix)
 }
 
 
@@ -136,8 +95,7 @@ pub fn timestamp_unique(dir: &PathBuf) -> String {
 pub fn write_code<T: AsRef<str>, U: AsRef<str>, V: AsRef<str>>(code: T, ext: U, prefix: V, dir_path: &PathBuf) {
     let mut options = OpenOptions::new();
     options.write(true)
-        .create_new(true)
-        .create(true);
+        .create_new(true);
 
     let ref mut path = dir_path.clone();
     path.push(format!("code-{}", prefix.as_ref()));

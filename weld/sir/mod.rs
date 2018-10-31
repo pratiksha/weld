@@ -48,6 +48,10 @@ pub enum StatementKind {
         child: Symbol,
         index: Symbol,
     },
+    OptLookup {
+        child: Symbol,
+        index: Symbol,
+    },
     MakeStruct(Vec<Symbol>),
     MakeVector(Vec<Symbol>),
     Merge { builder: Symbol, value: Symbol },
@@ -70,7 +74,7 @@ pub enum StatementKind {
     },
     Sort {
         child: Symbol,
-        keyfunc: SirFunction,
+        keyfunc: FunctionId,
     },
     Serialize(Symbol),
     Deserialize(Symbol),
@@ -102,9 +106,6 @@ pub struct ParallelForData {
     pub idx_arg: Symbol,
     pub body: FunctionId,
     pub innermost: bool,
-    /// If `true`, always invoke parallel runtime for the loop.
-    pub always_use_runtime: bool,
-    pub grain_size: Option<i32>
 }
 
 impl StatementKind {
@@ -163,6 +164,13 @@ impl StatementKind {
                 vars.push(child);
             }
             Lookup {
+                ref child,
+                ref index,
+            } => {
+                vars.push(child);
+                vars.push(index);
+            }
+            OptLookup {
                 ref child,
                 ref index,
             } => {
@@ -407,7 +415,7 @@ impl SirFunction {
     pub fn symbol_type(&self, sym: &Symbol) -> WeldResult<&Type> {
         self.locals.get(sym).map(|s| Ok(s)).unwrap_or_else(|| {
             self.params.get(sym).map(|s| Ok(s)).unwrap_or_else(|| {
-                compile_err!("Can't find symbol {}#{}", sym.name, sym.id)
+                compile_err!("Can't find symbol {}", sym.to_string())
             })
         })
     }
@@ -547,6 +555,10 @@ impl fmt::Display for StatementKind {
                 ref child,
                 ref index,
             } => write!(f, "lookup({}, {})", child, index),
+            OptLookup {
+                ref child,
+                ref index,
+            } => write!(f, "optlookup({}, {})", child, index),
             ParallelFor(ref pf) => {
                 write!(f, "for [")?;
                 for iter in &pf.data {
@@ -819,7 +831,7 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let ref func = prog.funcs[0];
     for name in closure {
         if func.params.get(&name) == None {
-            compile_err!("Unbound symbol {}#{}", name.name, name.id)?;
+            compile_err!("Unbound symbol {}", name.to_string())?;
         }
     }
     Ok(())
@@ -998,6 +1010,21 @@ fn gen_expr(expr: &Expr,
             Ok((cur_func, cur_block, res_sym))
         }
 
+        ExprKind::OptLookup {
+            ref data,
+            ref index,
+        } => {
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block, tracker, multithreaded)?;
+
+            let kind = OptLookup {
+                child: data_sym,
+                index: index_sym.clone(),
+            };
+            let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
+            Ok((cur_func, cur_block, res_sym))
+        }
+
         ExprKind::KeyExists { ref data, ref key } => {
             let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker, multithreaded)?;
             let (cur_func, cur_block, key_sym) = gen_expr(key, prog, cur_func, cur_block, tracker, multithreaded)?;
@@ -1037,7 +1064,6 @@ fn gen_expr(expr: &Expr,
                 let keyfunc_id = prog.add_func();
                 let keyblock = prog.funcs[keyfunc_id].add_block();
                 let (keyfunc_id, keyblock, key_sym) = gen_expr(body, prog, keyfunc_id, keyblock, tracker, multithreaded)?;
-
                 prog.funcs[keyfunc_id].params.insert(params[0].name.clone(), params[0].ty.clone());
                 prog.funcs[keyfunc_id].blocks[keyblock].terminator = Terminator::ProgramReturn(key_sym.clone());
 
@@ -1046,7 +1072,7 @@ fn gen_expr(expr: &Expr,
 
                 let kind = Sort {
                     child: data_sym,
-                    keyfunc: key_function
+                    keyfunc: keyfunc_id,
                 };
                 let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
                 Ok((cur_func, cur_block, res_sym))
@@ -1356,8 +1382,6 @@ fn gen_expr(expr: &Expr,
                                     data_arg: params[2].name.clone(),
                                     body: body_func,
                                     innermost: is_innermost,
-                                    always_use_runtime: expr.annotations.always_use_runtime(),
-                                    grain_size: expr.annotations.grain_size().clone()
                                 });
 
                 let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &builder.ty, kind);
@@ -1369,15 +1393,4 @@ fn gen_expr(expr: &Expr,
 
         _ => compile_err!("Unsupported expression: {}", expr.pretty_print())
     }
-}
-
-/// Return true if an expression contains parallel for operators
-fn contains_parallel_expressions(expr: &Expr) -> bool {
-    let mut found = false;
-    expr.traverse(&mut |ref e| {
-        if let ExprKind::For { .. } = e.kind {
-            found = true;
-        }
-    });
-    found
 }
