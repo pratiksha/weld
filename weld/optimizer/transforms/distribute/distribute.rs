@@ -3,7 +3,6 @@
 
 use std::collections::HashSet;
 
-use annotation::*;
 use ast::*;
 use ast::ExprKind::*;
 use ast::Type::*;
@@ -25,10 +24,26 @@ use parser::*;
 #[cfg(test)]
 use type_inference::*;
 
+pub const SHARDED_ANNOTATION: &str = "sharded";
+
 /* Names of required C UDFs, implemented in Clamor. */
 const SHARD_SYM: &str = "shard_data";
 const DISPATCH_SYM: &str = "dispatch";
 const DISPATCH_ONE_SYM: &str = "dispatch_one";
+
+/// If the sharded annotation is set, return it.
+pub fn get_sharded(e: &Expr) -> Option<bool> {
+    let annot = e.annotations.get(SHARDED_ANNOTATION);
+    match annot {
+        None => None,
+        Some(value) => Some(value.parse::<bool>().unwrap())
+    }
+}
+
+/// Set the sharded annotation on this expr.
+pub fn set_sharded(e: &mut Expr, value: bool) {
+    e.annotations.set(SHARDED_ANNOTATION, value.to_string());
+}
 
 /// Information about vectors that will be inputs to subprograms.
 pub struct vec_info {
@@ -60,30 +75,30 @@ fn get_parameters(e: &Expr) -> HashSet<Parameter> {
 /// Traverse the expression and recursively set the 'sharded' annotations wherever the variable `name` is used.
 /// This annotations indicates that a vector of vectors is a set of shards of a single vector rather than a normal nested vector.
 /// TODO: currently assumes an entire sharded vector will not be passed as an argument to a Lambda.
-fn set_sharded(expr: &mut Expr, name: String) {
-    let mut names = vec![name];
+// fn set_sharded(expr: &mut Expr, name: String) {
+//     let mut names = vec![name];
     
-    expr.traverse_mut(&mut |ref mut e| {
-        if let Ident(ref sym) = e.kind {
-            if names.contains(&sym.name) {
-                e.annotations.set_sharded(true);
-                names.push(sym.name.clone());
-            }
-        } else if let Let { ref name, ref mut value, .. } = e.kind {
-            let mut set = false;
-            if let Ident(ref sym) = value.kind {
-                if names.contains(&sym.name) {
-                    set = true;
-                    names.push(sym.name.clone());
-                }
-            }
+//     expr.traverse_mut(&mut |ref mut e| {
+//         if let Ident(ref sym) = e.kind {
+//             if names.contains(&sym.name()) {
+//                 e.annotations.set(SHARDED_ANNOTATION, "true");
+//                 names.push(sym.name().clone());
+//             }
+//         } else if let Let { ref name, ref mut value, .. } = e.kind {
+//             let mut set = false;
+//             if let Ident(ref sym) = value.kind {
+//                 if names.contains(&sym.name()) {
+//                     set = true;
+//                     names.push(sym.name().clone());
+//                 }
+//             }
 
-            if set {
-                value.annotations.set_sharded(true);
-            }
-        }
-    });
-}
+//             if set {
+//                 value.annotations.set(SHARDED_ANNOTATION, "true");
+//             }
+//         }
+//     });
+// }
 
 /// Convert a For into a distributed For.
 /// Generate UDF to dispatch RPCs for this function.
@@ -100,7 +115,7 @@ pub fn gen_distributed_loop(e: &Expr, nworkers_conf: &i32) -> WeldResult<Option<
         let mut len_opt: Option<Expr> = None;
         for it in iters.iter() {
             if let Ident(ref sym) = (*it).data.kind {
-                let is_sharded = (*it).data.annotations.sharded().clone();
+                let is_sharded = get_sharded(&(*it).data).unwrap();
                 if is_sharded {
                     // already sharded. it type is a vec[vec[T]]
                     if let Vector(ref ty) = (*it).data.ty {
@@ -238,18 +253,20 @@ pub fn distribute(expr: &mut Expr, nworkers_conf: &i32) {
             print!("got lookup\n");
             if let Res { ref builder } = data.kind {
                 print!("got res\n");
-                if builder.annotations.sharded() {
+                let is_sharded = get_sharded(&builder).unwrap();
+                if is_sharded {
                     let mut new_e = e.clone();
-                    new_e.annotations.set_sharded(true);
+                    set_sharded(&mut new_e, true);
                     return Some(new_e);
                 }
             }
         } else if let Res { ref builder } = e.kind {
             print!("got res\n");
-            if builder.annotations.sharded() {
+            let is_sharded = get_sharded(&builder).unwrap();
+            if is_sharded {
                 print!("got sharded\n");
                 let mut new_e = constructors::result_expr((**builder).clone()).unwrap(); /* update the type */
-                new_e.annotations.set_sharded(true);
+                set_sharded(&mut new_e, true);
                 print!("result type: {}\n", &new_e.ty);
                 print!("result builder type: {}\n", &builder.ty);
                 return Some(new_e);
@@ -260,14 +277,15 @@ pub fn distribute(expr: &mut Expr, nworkers_conf: &i32) {
                 print!("got res\n");
                 if let For { ref iters, ref builder, ref func } = builder.kind {
                     print!("got for\n");
-                    if builder.annotations.sharded() {
+                    let is_sharded = get_sharded(&builder).unwrap();
+                    if is_sharded {
                         print!("sharded\n");
                         if let Builder(ref bk, _) = builder.ty {
                             print!("got builder\n");
                             if let BuilderKind::Appender(_) = bk {
                                 print!("got appender\n");
                                 let mut replace_let = e.clone(); // TODO sharded should be propagated to Idents using the name as well
-                                replace_let.annotations.set_sharded(true);
+                                set_sharded(&mut replace_let, true);
                                 return Some(replace_let);
                             }
                         }

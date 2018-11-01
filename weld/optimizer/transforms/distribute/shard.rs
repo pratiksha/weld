@@ -1,6 +1,5 @@
 //! Functions to generate shards from vectors and vector Slices from shards.
 
-use annotation::*;
 use ast::*;
 use ast::ExprKind::*;
 use ast::Type::*;

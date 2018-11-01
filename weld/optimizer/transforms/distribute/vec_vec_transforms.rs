@@ -14,12 +14,14 @@ use parser::*;
 #[cfg(test)]
 use type_inference::*;
 
+use optimizer::transforms::distribute::distribute;
+
 const LOOKUP_SYM: &str = "lookup_index";
 
 /// Transform a Lookup on a vec[T] into an equivalent Lookup on a vec[vec[T]].
 pub fn transform_lookup(expr: &mut Expr) -> WeldResult<Expr> {
     if let Lookup { ref data, ref index } = expr.kind {
-        if data.annotations.sharded() {
+        if distribute::get_sharded(&data).unwrap() {
             if let Vector(ref ty) = data.ty {
                 if let Vector(ref ty) = **ty {
                     let mut sym_gen = SymbolGenerator::from_expression(expr);
@@ -61,7 +63,7 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
     if let Res { ref builder } = expr.kind {
         /* this Res will be a sharded vector when it is materialized */
         print!("type: {}\n", &expr.ty);
-        if expr.annotations.sharded() {
+        if distribute::get_sharded(&expr).unwrap() {
             if let Vector(ref ty) = expr.ty {
                 if let Vector(ref ty) = (**ty) {
                     // iterate over shards

@@ -1,6 +1,5 @@
 //! Utility functions to sort a list of {k, v} pairs on keys, then strip thekeys.
 
-use annotation::*;
 use ast::*;
 use ast::ExprKind::*;
 use ast::Type::*;

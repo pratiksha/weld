@@ -1,4 +1,3 @@
-use annotation::*;
 use ast::*;
 use ast::ExprKind::*;
 use ast::Type::*;

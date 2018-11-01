@@ -8,6 +8,7 @@ use error::*;
 use ast::constructors;
 use util::SymbolGenerator;
 
+use optimizer::transforms::distribute::distribute;
 use optimizer::transforms::distribute::code_util;
 
 pub fn iters_to_idents(e: &Expr) -> WeldResult<(Expr, Vec<(Symbol, Expr)>)> {
@@ -20,7 +21,8 @@ pub fn iters_to_idents(e: &Expr) -> WeldResult<(Expr, Vec<(Symbol, Expr)>)> {
                 new_iters.push(it.clone());
             } else {
                 let (new_sym, mut new_ident) = code_util::new_sym_and_ident("iter_sym", &(*it).data.ty, e);
-                new_ident.annotations.set_sharded((*it).data.annotations.sharded());
+                let was_sharded = distribute::get_sharded(&(*it).data).unwrap();
+                distribute::set_sharded(&mut new_ident, was_sharded);
                 new_iters.push(
                     Iter {
                         data: Box::new(new_ident.clone()),
@@ -44,7 +46,7 @@ pub fn iters_to_idents(e: &Expr) -> WeldResult<(Expr, Vec<(Symbol, Expr)>)> {
 
         /* TODO propagate vectorized */
         let mut new_loop = constructors::for_expr(new_iters, (**builder).clone(), (**func).clone(), is_vectorizable)?;
-        new_loop.annotations.set_sharded(e.annotations.sharded());
+        distribute::set_sharded(&mut new_loop, distribute::get_sharded(&e).unwrap());
         Ok((new_loop, new_symbols))
     } else {
         compile_err!("iters_to_idents: non-For passed to iters_to_idents")

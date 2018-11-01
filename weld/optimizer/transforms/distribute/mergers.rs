@@ -1,6 +1,5 @@
 //! Transform mergers on vec[T] so that they behave appropriately on sharded vec[vec[T]].
 
-use annotation::*;
 use ast::*;
 use ast::ExprKind::*;
 use ast::Type::*;
@@ -8,6 +7,7 @@ use conf::ParsedConf;
 use error::*;
 use ast::constructors;
 
+use optimizer::transforms::distribute::distribute::SHARDED_ANNOTATION;
 use optimizer::transforms::distribute::code_util;
 
 /// Merge a vector of shards into a vec[vec[T]]. In order to do this, the builder is modified to build
@@ -38,7 +38,7 @@ pub fn gen_merge_appender(result_iter: &Iter, result_ty: Type,
     print!("loop type: {}\n", &loop_expr.ty);
 
     // Set the "sharded" annotations so we know that this vec[vec[T]] should be treated as a vec[T].
-    loop_expr.annotations.set_sharded(true);
+    loop_expr.annotations.set("sharded", "true");
         
     Ok(loop_expr)
 }
