@@ -200,6 +200,8 @@ impl Appender {
         LLVMPositionBuilderAtEnd(builder, finish_block);
 
         let mut merge_pointer = self.gen_index(builder, appender, Some(size))?;
+        let intptr = LLVMBuildPtrToInt(builder, merge_pointer, self.i64_type(), c_str!(""));
+        intrinsics.call_weld_run_print_ptr(builder, run_handle, intptr);
         if vectorized {
             merge_pointer = LLVMBuildBitCast(builder,
                                              merge_pointer,

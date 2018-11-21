@@ -21,7 +21,7 @@ pub fn iters_to_idents(e: &Expr) -> WeldResult<(Expr, Vec<(Symbol, Expr)>)> {
                 new_iters.push(it.clone());
             } else {
                 let (new_sym, mut new_ident) = code_util::new_sym_and_ident("iter_sym", &(*it).data.ty, e);
-                let was_sharded = distribute::get_sharded(&(*it).data).unwrap();
+                let was_sharded = distribute::get_sharded(&(*it).data);
                 distribute::set_sharded(&mut new_ident, was_sharded);
                 new_iters.push(
                     Iter {
@@ -46,7 +46,7 @@ pub fn iters_to_idents(e: &Expr) -> WeldResult<(Expr, Vec<(Symbol, Expr)>)> {
 
         /* TODO propagate vectorized */
         let mut new_loop = constructors::for_expr(new_iters, (**builder).clone(), (**func).clone(), is_vectorizable)?;
-        distribute::set_sharded(&mut new_loop, distribute::get_sharded(&e).unwrap());
+        distribute::set_sharded(&mut new_loop, distribute::get_sharded(&e));
         Ok((new_loop, new_symbols))
     } else {
         compile_err!("iters_to_idents: non-For passed to iters_to_idents")

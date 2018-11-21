@@ -17,6 +17,8 @@ use std::sync::{Once, ONCE_INIT};
 
 use std::alloc::{Layout, GlobalAlloc};
 
+mod rsmalloc;
+
 pub type Ptr = *mut u8;
 pub type WeldRuntimeContextRef = *mut WeldRuntimeContext;
 
@@ -103,6 +105,7 @@ impl WeldRuntimeContext {
             return ptr::null_mut();
         }
 
+        assert!(size >= 0);
         let size = size as usize;
 
         if self.allocated + size > self.memlimit {
@@ -112,7 +115,8 @@ impl WeldRuntimeContext {
                    self.allocated + size);
         }
         let layout = Layout::from_size_align_unchecked(size as usize, DEFAULT_ALIGN);
-        let mem = Allocator.alloc(layout.clone());
+        //let mem = Allocator.alloc(layout.clone());
+        let mem = rsmalloc::smalloc(size as u64);
 
         self.allocated += layout.size();
         trace!("Alloc'd pointer {:?} ({} bytes)", mem, layout.size());
@@ -127,6 +131,7 @@ impl WeldRuntimeContext {
             return self.malloc(size)
         }
 
+        assert!(size >= 0);
         let size = size as usize;
         let old_layout = self.allocations.remove(&pointer).unwrap();
         if self.allocated - old_layout.size() + size > self.memlimit {
@@ -137,7 +142,8 @@ impl WeldRuntimeContext {
         }
 
         // Must pass *old* layout to realloc!
-        let mem = Allocator.realloc(pointer, old_layout.clone(), size);
+        //let mem = Allocator.realloc(pointer, old_layout.clone(), size);
+        let mem = rsmalloc::srealloc(pointer, size as u64);
         let new_layout = Layout::from_size_align_unchecked(size, DEFAULT_ALIGN);
 
         self.allocated -= old_layout.size();
@@ -189,7 +195,8 @@ impl WeldRuntimeContext {
 
         trace!("Freeing pointer {:?} ({} bytes) in runst_free()", pointer, layout.size());
 
-        Allocator.dealloc(pointer, layout.clone());
+        //Allocator.dealloc(pointer, layout.clone());
+        rsmalloc::sfree(pointer);
         self.allocated -= layout.size();
     }
 
@@ -244,6 +251,7 @@ unsafe fn initialize() {
     x += weld_runst_set_errno as i64;
 
     x += weld_runst_print_int as i64;
+    x += weld_runst_print_ptr as i64;
     x += weld_runst_print as i64;
 
     trace!("Runtime initialized with hashed values {}", x);
@@ -330,4 +338,10 @@ pub unsafe extern "C" fn weld_runst_print(_run: WeldRuntimeContextRef, string: *
 /// Print a value from generated code.
 pub unsafe extern "C" fn weld_runst_print_int(_run: WeldRuntimeContextRef, i: uint64_t) {
     println!("{}", i);
+}
+
+#[no_mangle]
+/// Print a pointer from generated code.
+pub unsafe extern "C" fn weld_runst_print_ptr(_run: WeldRuntimeContextRef, p: uint64_t) {
+    println!("Pointer: {:x}", p);
 }

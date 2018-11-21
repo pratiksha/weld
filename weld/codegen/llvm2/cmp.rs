@@ -159,13 +159,6 @@ impl GenCmp for LlvmGenerator {
                     let field_right = LLVMBuildStructGEP(builder, right, i as u32, c_str!(""));
                     let mut args = [field_left, field_right];
                     let field_result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!("")); // -1, 0, 1
-
-                    // Finish block - set result.
-                    LLVMPositionBuilderAtEnd(builder, done_block);
-                    let result = LLVMBuildPhi(builder, ret_ty, c_str!(""));
-                    let mut blocks = [entry_block, on_neq_block];
-                    let mut values = [self.i32(-1), on_geq];
-                    LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
                     
                     result = LLVMBuildAnd(builder, result, field_result, c_str!(""));
                 }
@@ -362,11 +355,10 @@ impl GenCmp for LlvmGenerator {
         let left  = LLVMBuildBitCast(builder, left,  LLVMPointerType(*elem_ty, 0), c_str!(""));
         let right = LLVMBuildBitCast(builder, right, LLVMPointerType(*elem_ty, 0), c_str!(""));
 
-        print!("kf\n");
         // Call the key function.
         let left_value  = self.load(builder, left)?;
         let right_value = self.load(builder, right)?;
-        let left_var = LLVMBuildAlloca(builder, self.llvm_type(kf_return_ty)?, c_str!(""));
+        let left_var  = LLVMBuildAlloca(builder, self.llvm_type(kf_return_ty)?, c_str!(""));
         let right_var = LLVMBuildAlloca(builder, self.llvm_type(kf_return_ty)?, c_str!(""));
         let mut kf_left_arg  = [left_value, run];
         let mut kf_right_arg = [right_value, run];
@@ -388,7 +380,6 @@ impl GenCmp for LlvmGenerator {
         LLVMDisposeBuilder(builder);
 
         self.keyfunc_cmp_fns.insert(kf_id.clone(), function);
-        print!("finished kf\n");
         Ok(function)
     }
 

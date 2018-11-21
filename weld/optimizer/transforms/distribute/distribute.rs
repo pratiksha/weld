@@ -32,11 +32,11 @@ const DISPATCH_SYM: &str = "dispatch";
 const DISPATCH_ONE_SYM: &str = "dispatch_one";
 
 /// If the sharded annotation is set, return it.
-pub fn get_sharded(e: &Expr) -> Option<bool> {
+pub fn get_sharded(e: &Expr) -> bool {
     let annot = e.annotations.get(SHARDED_ANNOTATION);
     match annot {
-        None => None,
-        Some(value) => Some(value.parse::<bool>().unwrap())
+        None => false,
+        Some(value) => value.parse::<bool>().unwrap()
     }
 }
 
@@ -115,7 +115,7 @@ pub fn gen_distributed_loop(e: &Expr, nworkers_conf: &i32) -> WeldResult<Option<
         let mut len_opt: Option<Expr> = None;
         for it in iters.iter() {
             if let Ident(ref sym) = (*it).data.kind {
-                let is_sharded = get_sharded(&(*it).data).unwrap();
+                let is_sharded = get_sharded(&(*it).data);
                 if is_sharded {
                     // already sharded. it type is a vec[vec[T]]
                     if let Vector(ref ty) = (*it).data.ty {
@@ -253,7 +253,7 @@ pub fn distribute(expr: &mut Expr, nworkers_conf: &i32) {
             print!("got lookup\n");
             if let Res { ref builder } = data.kind {
                 print!("got res\n");
-                let is_sharded = get_sharded(&builder).unwrap();
+                let is_sharded = get_sharded(&builder);
                 if is_sharded {
                     let mut new_e = e.clone();
                     set_sharded(&mut new_e, true);
@@ -262,7 +262,7 @@ pub fn distribute(expr: &mut Expr, nworkers_conf: &i32) {
             }
         } else if let Res { ref builder } = e.kind {
             print!("got res\n");
-            let is_sharded = get_sharded(&builder).unwrap();
+            let is_sharded = get_sharded(&builder);
             if is_sharded {
                 print!("got sharded\n");
                 let mut new_e = constructors::result_expr((**builder).clone()).unwrap(); /* update the type */
@@ -277,7 +277,7 @@ pub fn distribute(expr: &mut Expr, nworkers_conf: &i32) {
                 print!("got res\n");
                 if let For { ref iters, ref builder, ref func } = builder.kind {
                     print!("got for\n");
-                    let is_sharded = get_sharded(&builder).unwrap();
+                    let is_sharded = get_sharded(&builder);
                     if is_sharded {
                         print!("sharded\n");
                         if let Builder(ref bk, _) = builder.ty {

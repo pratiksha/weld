@@ -745,26 +745,22 @@ impl LlvmGenerator {
 
     /// Generate code for an SIR program.
     unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<LlvmGenerator> {
-        print!("generating....\n");
         let mut gen = LlvmGenerator::new(conf)?;
 
         // Declare each function first to create a reference to it. Loop body functions are only
         // called by their ParallelForData terminators, so those are generated on-the-fly during
         // loop code generation.
-        print!("declaring....\n");
         for func in program.funcs.iter().filter(|f| !f.loop_body) {
             gen.declare_sir_function(func)?;
         }
 
         // Generate each non-loop body function in turn. Loop body functions are constructed when
         // the For loop terminator is generated, with the loop control flow injected into the function.
-        print!("generating funcs....\n");
         for func in program.funcs.iter().filter(|f| !f.loop_body) {
             gen.gen_sir_function(program, func)?;
         }
 
         // Generates a callable entry function in the module.
-        print!("entry....\n");
         gen.gen_entry(program)?;
         Ok(gen)
     }
@@ -785,6 +781,14 @@ impl LlvmGenerator {
         let string = self.gen_global_string(builder, string);
         let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
         let _ = self.intrinsics.call_weld_run_print(builder, run, pointer);
+        Ok(())
+    }
+
+    unsafe fn gen_print_pointer(&mut self,
+                                builder: LLVMBuilderRef,
+                                run: LLVMValueRef,
+                                ptr: LLVMValueRef) -> WeldResult<()> {
+        let _ = self.intrinsics.call_weld_run_print(builder, run, ptr);
         Ok(())
     }
 
@@ -1062,14 +1066,15 @@ impl LlvmGenerator {
                 // The CUDF takes an i8* and outputs an i8*, so we have to pack the args into a struct
                 // and bitcast the struct to i8 before passing to the UDF call.
                 for arg in args.iter() {
-                    arg_tys.push(LLVMPointerType(self.llvm_type(context.sir_function.symbol_type(arg)?)?, 0));
+                    arg_tys.push(self.llvm_type(context.sir_function.symbol_type(arg)?)?);
                 }
 
                 let final_type = LLVMStructType(arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
                 let run = context.get_run();
-                let size = self.size_of(final_type);
+                let size = self.size_of_bytes(final_type) as i64;
+                let ll_size = self.i64(size);
                 let bytes = self.intrinsics.call_weld_run_malloc(context.builder,
-                                                                 run, size, None);
+                                                                 run, ll_size, None);
                 let arg_struct_ptr = LLVMBuildBitCast(context.builder, bytes,
                                                       LLVMPointerType(final_type, 0), c_str!(""));
 
@@ -1083,12 +1088,11 @@ impl LlvmGenerator {
                 }
 
                 let output_ty = LLVMPointerType(return_ty, 0);
-                let input_cast_ptr = LLVMConstBitCast(arg_struct_ptr, LLVMPointerType(self.i8_type(), 0));
-                let output_cast_ptr = LLVMConstBitCast(output_pointer, LLVMPointerType(self.i8_type(), 0));
+                let input_cast_ptr = LLVMBuildBitCast(context.builder, arg_struct_ptr, self.void_pointer_type(), c_str!(""));
+                let output_cast_ptr = LLVMBuildBitCast(context.builder, output_pointer, self.void_pointer_type(), c_str!(""));
 
                 // input and output are i8 pointers
-                let mut i8_tys = vec![LLVMPointerType(self.i8_type(), 0),
-                                      LLVMPointerType(self.i8_type(), 0)]; 
+                let mut i8_tys = vec![self.void_pointer_type(), self.void_pointer_type()]; 
                     
                 let fn_ret_ty = self.void_type();
                 self.intrinsics.add(symbol_name, fn_ret_ty, &mut i8_tys);
@@ -1301,13 +1305,10 @@ impl LlvmGenerator {
                     statement.output.as_ref().unwrap())?;
                 
                 let ref keyfunc_func = context.sir_program.funcs[*keyfunc];
-                print!("in sort\n");
                 if let Vector(ref elem_ty) = *output_type {
                     // check that type of key (return type of SirFunction) is a comparable type
-                    print!("in vector - match keyfunc\n");
                     match keyfunc_func.return_type {
                         Scalar(_) => {
-                            print!("got scalar keyfunc\n");
                             let child_value = self.load(context.builder, context.get_value(child)?)?;
                             let child_type = context.sir_function.symbol_type(child)?;
 
@@ -1536,6 +1537,10 @@ impl LlvmGenerator {
         Ok(result)
     }
 
+    unsafe fn size_of_bytes(&mut self, ty: LLVMTypeRef) -> u64 {
+        (self.size_of_bits(ty) / 8)
+    }
+    
     unsafe fn size_of_ty(&mut self, ty: &Type) -> usize {
         let ll_ty = self.llvm_type(ty).unwrap();
         (self.size_of_bits(ll_ty) / 8) as usize

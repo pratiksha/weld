@@ -29,6 +29,12 @@ fn link_stdcpp() {
     println!("cargo:rustc-link-lib=dylib=stdc++");
 }
 
+/// Link the C++ libraries.
+fn link_clamor(clamor_dir: &str) {
+    println!("cargo:rustc-link-lib=dylib=smalloc");
+    println!("cargo:rustc-link-search=native={}/smalloc", clamor_dir);
+}
+
 /// Build the LLVM Extensions.
 fn build_llvmext(project_dir: &str) {
     let status = Command::new("make")
@@ -44,6 +50,7 @@ fn build_llvmext(project_dir: &str) {
 
 fn main() {
     let ref project_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let ref clamor_dir = env::var("CLAMOR_HOME").unwrap();
 
     // Build ID
     register_build_id();
@@ -53,4 +60,7 @@ fn main() {
 
     // Build and link external libs.
     build_llvmext(project_dir);
+
+    // Dependencies for Clamor.
+    link_clamor(clamor_dir);
 }

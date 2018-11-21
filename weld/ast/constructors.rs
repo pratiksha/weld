@@ -440,10 +440,10 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
             } else {
                 vec_elem_tys[0].clone()
             };
-            if *param_2_ty != elem_ty {
+            /*if *param_2_ty != elem_ty {
                 return compile_err!("Internal error: Mismatched types in for_expr - function elem type {} != {}",
                                  param_2_ty, &elem_ty);
-            }
+            }*/
         } else {
             let composite_ty = if vectorized {
                 let mut vec_elem_tys_simd = vec![];
