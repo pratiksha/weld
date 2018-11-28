@@ -94,3 +94,9 @@ pub unsafe extern "C" fn weld_runst_print(_run: WeldRuntimeContextRef, string: *
 pub unsafe extern "C" fn weld_runst_print_int(_run: WeldRuntimeContextRef, i: uint64_t) {
     println!("{}", i);
 }
+
+#[no_mangle]
+/// Print a pointer from generated code.
+pub unsafe extern "C" fn weld_runst_print_ptr(_run: WeldRuntimeContextRef, p: uint64_t) {
+    println!("Pointer: {:x}", p);
+}

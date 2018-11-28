@@ -9,11 +9,6 @@ use error::*;
 use ast::constructors;
 use util::SymbolGenerator;
 
-#[cfg(test)]
-use parser::*;
-#[cfg(test)]
-use type_inference::*;
-
 use optimizer::transforms::distribute::distribute;
 
 const LOOKUP_SYM: &str = "lookup_index";

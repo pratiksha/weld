@@ -168,10 +168,10 @@ pub const CONF_ENABLE_BOUNDS_CHECKS_DEFAULT: bool = false;
 pub const CONF_DUMP_CODE_DIR_DEFAULT: &'static str = ".";
 
 /// Automatic sharding off by default.
-pub const DEFAULT_DISTRIBUTE: bool = false;
+pub const CONF_DISTRIBUTE_DEFAULT: bool = false;
 
 /// Default number of workers in Clamor.
-pub const DEFAULT_NWORKERS: i32 = 1;
+pub const CONF_NWORKERS_DEFAULT: i32 = 1;
 
 /// Default set of optimization passes.
 pub const CONF_OPTIMIZATION_PASSES_DEFAULT: &[&'static str] =  &[

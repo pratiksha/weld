@@ -62,7 +62,11 @@ pub fn binop_expr(kind: BinOpKind, left: Expr, right: Expr) -> WeldResult<Expr> 
     if left.ty != right.ty {
         compile_err!("Internal error: Mismatched types in binop_expr")
     } else {
-        let ty = left.ty.clone();
+        let ty = if kind.is_comparison() {
+            Scalar(ScalarKind::Bool)
+        } else {
+            left.ty.clone()
+        };
         new_expr(BinOp {
                      kind: kind,
                      left: Box::new(left),
@@ -238,12 +242,28 @@ pub fn slice_expr(data: Expr, index: Expr, size: Expr) -> WeldResult<Expr> {
              ty)
 }
 
+/// The Weld internal equivalent of the `compare` macro.
+/// Note that left and right will be cloned, so should be assigned to Idents if needed.
+pub fn default_compare_expr(left: Expr, right: Expr) -> WeldResult<Expr> {
+    let lt_expr = binop_expr(BinOpKind::LessThan, left.clone(), right.clone())?;
+    let gt_expr = binop_expr(BinOpKind::LessThan, left.clone(), right.clone())?;
+
+    let minus_one = literal_expr(LiteralKind::I32Literal(-1))?;
+    let plus_one  = literal_expr(LiteralKind::I32Literal(1))?;
+    let zero      = literal_expr(LiteralKind::I32Literal(0))?;
+
+    let inner_cond = if_expr(lt_expr, minus_one, zero)?;
+    let outer_cond = if_expr(gt_expr, plus_one, inner_cond)?;
+
+    Ok(outer_cond)
+}
+
 pub fn sort_expr(data: Expr, cmpfunc: Expr) -> WeldResult<Expr> {
     let mut type_checked = false;
 
     if let Vector(ref vec_ty) = data.ty {
         if let Function(ref params, ref body) = cmpfunc.ty {
-            if params.len() == 1 && params[0] == **vec_ty {
+            if params.len() == 2 && params[0] == **vec_ty && params[1] == **vec_ty {
                 if let Scalar(_) = **body {
                     type_checked = true;
                 }

@@ -243,109 +243,21 @@ impl Drop for WeldRuntimeContext {
 }
 
 unsafe fn initialize() {
-    ONCE.call_once(|| {    // Hack to prevent symbols from being compiled out in a Rust binary.
-    let mut x =  weld_runst_init as i64;
-    x += weld_runst_set_result as i64;
-    x += weld_runst_get_result as i64;
-    x += weld_runst_malloc as i64;
-    x += weld_runst_realloc as i64;
-    x += weld_runst_free as i64;
-    x += weld_runst_get_errno as i64;
-    x += weld_runst_set_errno as i64;
-
-    x += weld_runst_print_int as i64;
-    x += weld_runst_print_ptr as i64;
-    x += weld_runst_print as i64;
-
+    ONCE.call_once(|| {
+        // Hack to prevent symbols from being compiled out in a Rust binary.
+        let mut x =  weld_runst_init as i64;
+        x += weld_runst_set_result as i64;
+        x += weld_runst_get_result as i64;
+        x += weld_runst_malloc as i64;
+        x += weld_runst_realloc as i64;
+        x += weld_runst_free as i64;
+        x += weld_runst_get_errno as i64;
+        x += weld_runst_set_errno as i64;
+        
+        x += weld_runst_print_int as i64;
+        x += weld_runst_print_ptr as i64;
+        x += weld_runst_print as i64;
+        
         trace!("Runtime initialized with hashed values {}", x);
     });
-}
-
-#[no_mangle]
-/// Initialize the runtime.
-///
-/// This call currently circumvents an awkward problem with binaries using Rust, where the FFI
-/// below used by the Weld runtime is compiled out.
-pub unsafe extern "C" fn weld_init() {
-    ONCE.call_once(|| initialize());
-    if INITIALIZE_FAILED {
-        panic!("Weld runtime initialization failed")
-    }
-}
-
-#[no_mangle]
-/// Initialize the runtime if necessary, and then initialize run-specific information.
-pub unsafe extern "C" fn weld_runst_init(nworkers: int32_t, memlimit: int64_t) -> WeldRuntimeContextRef {
-    Box::into_raw(Box::new(WeldRuntimeContext::new(nworkers, memlimit)))
-}
-
-#[no_mangle]
-/// Allocate memory using `libc` `malloc`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int64_t) -> Ptr {
-    let run = &mut *run;
-    run.malloc(size)
-}
-
-#[no_mangle]
-/// Allocate memory using `libc` `remalloc`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_realloc(run: WeldRuntimeContextRef,
-                                     ptr: Ptr,
-                                     newsize: int64_t) -> Ptr {
-    let run = &mut *run;
-    run.realloc(ptr, newsize)
-}
-
-#[no_mangle]
-/// Free memory using `libc` `free`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_free(run: WeldRuntimeContextRef, ptr: Ptr) {
-    let run = &mut *run;
-    run.free(ptr)
-}
-
-#[no_mangle]
-/// Set the result pointer.
-pub unsafe extern "C" fn weld_runst_set_result(run: WeldRuntimeContextRef, ptr: Ptr) {
-    let run = &mut *run;
-    run.set_result(ptr)
-}
-
-#[no_mangle]
-/// Set the errno value.
-pub unsafe extern "C" fn weld_runst_set_errno(run: WeldRuntimeContextRef,
-                                              errno: WeldRuntimeErrno) {
-    let run = &mut *run;
-    run.set_errno(errno)
-}
-
-#[no_mangle]
-/// Get the errno value.
-pub unsafe extern "C" fn weld_runst_get_errno(run: WeldRuntimeContextRef) -> WeldRuntimeErrno {
-    let run = &mut *run;
-    run.errno()
-}
-
-#[no_mangle]
-/// Get the result pointer.
-pub unsafe extern "C" fn weld_runst_get_result(run: WeldRuntimeContextRef) -> Ptr {
-    let run = &mut *run;
-    run.result()
-}
-
-#[no_mangle]
-/// Print a value from generated code.
-pub unsafe extern "C" fn weld_runst_print(_run: WeldRuntimeContextRef, string: *const c_char) {
-    let string = CStr::from_ptr(string).to_str().unwrap();
-    println!("{} ", string);
-}
-
-#[no_mangle]
-/// Print a value from generated code.
-pub unsafe extern "C" fn weld_runst_print_int(_run: WeldRuntimeContextRef, i: uint64_t) {
-    println!("{}", i);
-}
-
-#[no_mangle]
-/// Print a pointer from generated code.
-pub unsafe extern "C" fn weld_runst_print_ptr(_run: WeldRuntimeContextRef, p: uint64_t) {
-    println!("Pointer: {:x}", p);
 }

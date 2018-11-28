@@ -10,16 +10,28 @@ use util::SymbolGenerator;
 
 use optimizer::transforms::distribute::code_util;
 
-fn gen_zero_keyfunc(element_ty: Type, ctx: &Expr) -> WeldResult<Expr> {
+/// generate a comparator to sort on the first element
+fn gen_zero_cmp_func(element_ty: Type, ctx: &Expr) -> WeldResult<Expr> {
     let mut sym_gen = SymbolGenerator::from_expression(ctx);
     
-    let param = Parameter {
-        name: sym_gen.new_symbol("e"),
+    let left_param = Parameter {
+        name: sym_gen.new_symbol("e1"),
         ty: element_ty.clone()
     };
-    let element_ident = constructors::ident_from_param(param.clone())?;
-    let lookup = constructors::getfield_expr(element_ident.clone(), 0)?;
-    let lookup_func = constructors::lambda_expr(vec![param], lookup)?;
+    let right_param = Parameter {
+        name: sym_gen.new_symbol("e2"),
+        ty: element_ty.clone()
+    };
+    
+    let left_ident  = constructors::ident_from_param(left_param.clone())?;
+    let right_ident = constructors::ident_from_param(right_param.clone())?;
+
+    let left_lookup  = constructors::getfield_expr(left_ident.clone(), 0)?;
+    let right_lookup = constructors::getfield_expr(right_ident.clone(), 0)?;
+
+    let comparator = constructors::default_compare_expr(left_lookup, right_lookup)?;
+
+    let lookup_func = constructors::lambda_expr(vec![left_param, right_param], comparator)?;
     Ok(lookup_func)
 }
 
@@ -44,7 +56,7 @@ pub fn gen_sorted_values_by_key(vec: &Expr, ctx: &Expr) -> WeldResult<Expr> {
 
     /* sort on first element (worker index) */
     let sorted_results = constructors::sort_expr(vec.clone(),
-                                          gen_zero_keyfunc(vec_ty.clone(), vec).unwrap())?;
+                                                 gen_zero_cmp_func(vec_ty.clone(), vec).unwrap())?;
 
     /* strip first element to leave only values */
     let appender = constructors::newbuilder_expr(BuilderKind::Appender(Box::new(elem_ty.clone())), None)?;

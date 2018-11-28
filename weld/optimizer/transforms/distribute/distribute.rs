@@ -19,11 +19,6 @@ use optimizer::transforms::distribute::shard::*;
 use optimizer::transforms::distribute::sort::*;
 use optimizer::transforms::distribute::vec_vec_transforms::*;
 
-#[cfg(test)]
-use parser::*;
-#[cfg(test)]
-use type_inference::*;
-
 pub const SHARDED_ANNOTATION: &str = "sharded";
 
 /* Names of required C UDFs, implemented in Clamor. */
@@ -299,30 +294,4 @@ pub fn distribute(expr: &mut Expr, nworkers_conf: &i32) {
 
     /* Finally, flatten the topmost result that will be returned to the calling program. */
     expr.transform_once(&mut |ref mut e| Some(flatten_toplevel_func(e).unwrap()));
-}
-
-/// Parse and perform type inference on an expression.
-#[cfg(test)]
-fn typed_expr(code: &str) -> TypedExpr {
-    let mut e = parse_expr(code).unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    e.to_typed().unwrap()
-}
-
-#[test]
-fn distribute_test() {
-    //let code = "|z:i32, x:vec[i32], y:vec[i32]| result(for(zip(x, y), merger[i32, +], |b,i,e|merge(b, e.$0 + z)))";
-    let code = "|x:vec[i32]| result(for(x, merger[i32, +], |b,i,e|merge(b, e)))";
-    let mut e = typed_expr(code);
-    distribute(&mut e, &1);
-    print!("{}\n", &e);
-}
-
-#[test]
-fn distribute_appender_test() {
-    //let code = "|z:i32, x:vec[i32], y:vec[i32]| result(for(zip(x, y), merger[i32, +], |b,i,e|merge(b, e.$0 + z)))";
-    let code = "|x:vec[i32]| result(for(x, appender[i32], |b,i,e|merge(b, e)))";
-    let mut e = typed_expr(code);
-    distribute(&mut e, &1);
-    print!("{}\n", &e);
 }
