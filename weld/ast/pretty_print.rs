@@ -183,6 +183,10 @@ fn to_string_impl(expr: &Expr, config: &mut PrettyPrintConfig) -> String {
             format!("(-{})", to_string_impl(e, config))
         }
 
+        Not(ref e) => {
+            format!("(!{})", to_string_impl(e, config))
+        }
+
         Broadcast(ref e) => {
             format!("broadcast({})", to_string_impl(e, config))
         }
@@ -271,10 +275,10 @@ fn to_string_impl(expr: &Expr, config: &mut PrettyPrintConfig) -> String {
                     to_string_impl(size, config))
         }
 
-        Sort { ref data, ref keyfunc } => {
+        Sort { ref data, ref cmpfunc } => {
             format!("sort({},{})",
                     to_string_impl(data, config),
-                    to_string_impl(keyfunc, config))
+                    to_string_impl(cmpfunc, config))
         }
 
         Lambda { ref params, ref body } => {

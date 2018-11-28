@@ -1,9 +1,13 @@
-//! Weld's runtime functions.
+//! Functions called from within the Weld runtime.
 //!
 //! These are functions that are accessed from generated code.
 
 extern crate libc;
 extern crate fnv;
+
+pub mod ffi;
+
+use self::ffi::*;
 
 use std::alloc::System as Allocator;
 use libc::{c_char, int32_t, int64_t, uint64_t};
@@ -20,12 +24,11 @@ use std::alloc::{Layout, GlobalAlloc};
 mod rsmalloc;
 
 pub type Ptr = *mut u8;
-pub type WeldRuntimeContextRef = *mut WeldRuntimeContext;
 
 /// Initialize the Weld runtime only once.
 static ONCE: Once = ONCE_INIT;
-static mut INITIALIZE_FAILED: bool = false;
 
+/// Alignment for allocations.
 const DEFAULT_ALIGN: usize = 8;
 
 /// An errno set by the runtime but also used by the Weld API.
@@ -240,7 +243,7 @@ impl Drop for WeldRuntimeContext {
 }
 
 unsafe fn initialize() {
-    // Hack to prevent symbols from being compiled out in a Rust binary.
+    ONCE.call_once(|| {    // Hack to prevent symbols from being compiled out in a Rust binary.
     let mut x =  weld_runst_init as i64;
     x += weld_runst_set_result as i64;
     x += weld_runst_get_result as i64;
@@ -254,7 +257,8 @@ unsafe fn initialize() {
     x += weld_runst_print_ptr as i64;
     x += weld_runst_print as i64;
 
-    trace!("Runtime initialized with hashed values {}", x);
+        trace!("Runtime initialized with hashed values {}", x);
+    });
 }
 
 #[no_mangle]

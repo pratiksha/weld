@@ -1,7 +1,8 @@
 //! Common transformations on expressions.
 
-pub mod distribute;
+pub mod algebraic;
 pub mod cse;
+pub mod distribute;
 pub mod loop_fusion;
 pub mod loop_fusion_2;
 pub mod inliner;

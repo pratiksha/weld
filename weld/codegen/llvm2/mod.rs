@@ -59,7 +59,7 @@ use std::mem;
 use std::ffi::{CStr, CString};
 
 use fnv::FnvHashMap;
-use libc::{c_char, c_double, c_ulonglong};
+use libc::{c_char, c_double, c_uint, c_ulonglong};
 
 use conf::ParsedConf;
 use error::*;
@@ -123,7 +123,7 @@ pub fn load_library(libname: &str) -> WeldResult<()> {
 /// Returns the size of a type in bytes.
 pub fn size_of(ty: &Type) -> usize {
     unsafe {
-        let mut gen = LlvmGenerator::new(ParsedConf::new()).unwrap();
+        let mut gen = LlvmGenerator::new(ParsedConf::default()).unwrap();
         gen.size_of_ty(ty)
     }
 }
@@ -134,29 +134,26 @@ pub fn size_of(ty: &Type) -> usize {
 /// calls.
 pub fn compile(program: &SirProgram,
                conf: &ParsedConf,
-               stats: &mut CompilationStats,
-               dump_prefix: &str) -> WeldResult<Box<dyn Runnable + Send + Sync>> {
+               stats: &mut CompilationStats) -> WeldResult<Box<dyn Runnable + Send + Sync>> {
 
     use runtime;
+    use util::dump::{write_code, DumpCodeFormat};
 
     info!("Compiling using single thread runtime");
 
     let codegen = unsafe { LlvmGenerator::generate(conf.clone(), &program)? };
-    if conf.dump_code.enabled {
-        write_code(codegen.to_string(), "ll", dump_prefix, &conf.dump_code.dir);
-    }
-    trace!("{}", codegen);
+
+    nonfatal!(write_code(codegen.to_string(), DumpCodeFormat::LLVM, &conf.dump_code));
 
     unsafe {
-        runtime::weld_init();
+        runtime::ffi::weld_init();
     }
 
     let module = unsafe { jit::compile(codegen.context, codegen.module, conf, stats)? };
 
-    if conf.dump_code.enabled {
-        write_code(module.asm()?, "S", format!("{}-opt", dump_prefix), &conf.dump_code.dir);
-        write_code(module.llvm()?, "ll", format!("{}-opt", dump_prefix), &conf.dump_code.dir);
-    }
+    nonfatal!(write_code(module.asm()?, DumpCodeFormat::Assembly, &conf.dump_code));
+    nonfatal!(write_code(module.llvm()?, DumpCodeFormat::LLVMOpt, &conf.dump_code));
+
     Ok(Box::new(module))
 }
 
@@ -303,13 +300,7 @@ pub struct LlvmGenerator {
     opaque_eq_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Comparison functions on various types.
     cmp_fns: FnvHashMap<Type, LLVMValueRef>,
-    /// Opaque, externally visible wrappers for comparison functions.
-    ///
-    /// These are used by qsort.
-    opaque_cmp_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Opaque comparison functions that contain a key function, indexed by the ID of the key function.
-    keyfunc_cmp_fns: FnvHashMap<FunctionId, LLVMValueRef>,
-    /// Hash functions on various types.
     hash_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Serialization functions on various types.
     serialize_fns: FnvHashMap<Type, LLVMValueRef>,
@@ -505,16 +496,7 @@ pub trait CodeGenExt {
 
     /// Returns the LLVM type corresponding to size_t on this architecture.
     unsafe fn size_t_type(&self) -> WeldResult<LLVMTypeRef> {
-        let size_t_bytes = mem::size_of::<libc::size_t>();
-        match size_t_bytes {
-            8 => Ok(self.i8_type()),
-            16 => Ok(self.i16_type()),
-            32 => Ok(self.i32_type()),
-            64 => Ok(self.i64_type()),
-            _ => {
-                return compile_err!("Unrecognized size in size_t")
-            }
-        }
+        Ok(LLVMIntTypeInContext(self.context(), mem::size_of::<libc::size_t>() as c_uint))
     }
 
     /// Computes the next power of two for the given value.
@@ -732,8 +714,6 @@ impl LlvmGenerator {
             eq_fns: FnvHashMap::default(),
             opaque_eq_fns: FnvHashMap::default(),
             cmp_fns: FnvHashMap::default(),
-            opaque_cmp_fns: FnvHashMap::default(),
-            keyfunc_cmp_fns: FnvHashMap::default(),
             hash_fns: FnvHashMap::default(),
             serialize_fns: FnvHashMap::default(),
             deserialize_fns: FnvHashMap::default(),
@@ -1256,6 +1236,10 @@ impl LlvmGenerator {
                 use self::numeric::NumericExpressionGen;
                 self.gen_negate(context, statement)
             }
+            Not(_) => {
+                use self::numeric::NumericExpressionGen;
+                self.gen_not(context, statement)
+            }
             NewBuilder { .. } => {
                 use self::builder::BuilderExpressionGen;
                 self.gen_new_builder(context, statement)
@@ -1299,65 +1283,53 @@ impl LlvmGenerator {
                     unreachable!()
                 }
             }
-            Sort { ref child, ref keyfunc } => { // keyfunc is an SirFunction
+            Sort { ref child, ref cmpfunc } => { // cmpfunc is an SirFunction
                 let output_pointer = context.get_value(output)?;
                 let output_type = context.sir_function.symbol_type(
                     statement.output.as_ref().unwrap())?;
                 
-                let ref keyfunc_func = context.sir_program.funcs[*keyfunc];
                 if let Vector(ref elem_ty) = *output_type {
-                    // check that type of key (return type of SirFunction) is a comparable type
-                    match keyfunc_func.return_type {
-                        Scalar(_) => {
-                            let child_value = self.load(context.builder, context.get_value(child)?)?;
-                            let child_type = context.sir_function.symbol_type(child)?;
+                    let child_value = self.load(context.builder, context.get_value(child)?)?;
+                    let child_type = context.sir_function.symbol_type(child)?;
 
-                            use ast::Type::Scalar;
-                            use ast::ScalarKind;
-                            use self::vector::VectorExt;
-                            let zero = self.zero(self.i64_type());
-                            let child_elems = self.gen_at(context.builder, child_type, child_value, zero)?;
-                            let elems_ptr = LLVMBuildBitCast(context.builder, child_elems,
-                                                             self.void_pointer_type(),
-                                                             c_str!(""));
-                            let size = self.gen_size(context.builder, child_type, child_value)?;
-                            let mut elem_ll_ty = self.llvm_type(&*elem_ty)?;
-                            let ty_size = self.size_of(elem_ll_ty);
-                            
-                            use self::cmp::GenCmp;
-                            let keyfunc_ll_fn = self.functions[keyfunc];
+                    use self::vector::VectorExt;
+                    let zero = self.zero(self.i64_type());
+                    let child_elems = self.gen_at(context.builder, child_type, child_value, zero)?;
+                    let elems_ptr = LLVMBuildBitCast(context.builder, child_elems,
+                                                     self.void_pointer_type(),
+                                                     c_str!(""));
+                    let size = self.gen_size(context.builder, child_type, child_value)?;
+                    let elem_ll_ty = self.llvm_type(elem_ty)?;
+                    let ty_size = self.size_of(elem_ll_ty);
+                    
+                    use self::cmp::GenCmp;
+                    let cmpfunc_ll_fn = self.functions[cmpfunc];
 
-                            let run = context.get_run();
-                            let comparator = self.gen_keyfunc_cmp_fn(&elem_ll_ty,
-                                                                     keyfunc,
-                                                                     &keyfunc_ll_fn,
-                                                                     &keyfunc_func.return_type)?;
+                    let run = context.get_run();
 
-                            // args to qsort are: base array pointer, num elements,
-                            // element size, comparator function
-                            let mut args = vec![elems_ptr, size, ty_size, comparator, run];
-                            let mut arg_tys = vec![LLVMTypeOf(elems_ptr),
-                                                   LLVMTypeOf(size),
-                                                   LLVMTypeOf(ty_size),
-                                                   LLVMTypeOf(comparator),
-                                                   LLVMTypeOf(run)];
-                            
-                            // Generate the call to qsort
-                            let void_type = self.void_type();
-                            self.intrinsics.add("qsort_r", void_type, &mut arg_tys); // In-place sort.
-                            self.intrinsics.call(context.builder, "qsort_r", &mut args);
+                    // Generate the comparator from the provided custom code.
+                    let comparator = self.gen_custom_cmp(elem_ll_ty,
+                                                         *cmpfunc,
+                                                         cmpfunc_ll_fn)?;
 
-                            LLVMBuildStore(context.builder, child_value, output_pointer);
-                            
-                            Ok(())
-                        },
-                        Vector(_) => {
-                            unimplemented!()
-                        },
-                        _ => {
-                            return compile_err!("Sort key function must have scalar or vector return type: {}", keyfunc_func.return_type)
-                        }
-                    }
+                    // args to qsort_r are: base array pointer, num elements,
+                    // element size, comparator function, run handle
+                    let mut args = vec![elems_ptr, size, ty_size, comparator, run];
+                    let mut arg_tys = vec![LLVMTypeOf(elems_ptr),
+                                           LLVMTypeOf(size),
+                                           LLVMTypeOf(ty_size),
+                                           LLVMTypeOf(comparator),
+                                           LLVMTypeOf(run)];
+                    
+                    // Generate the call to qsort.
+                    // In-place sort. TODO: clone vector before sorting.
+                    let void_type = self.void_type();
+                    self.intrinsics.add("qsort_r", void_type, &mut arg_tys); 
+                    self.intrinsics.call(context.builder, "qsort_r", &mut args)?;
+
+                    LLVMBuildStore(context.builder, child_value, output_pointer);
+                    
+                    Ok(())
                 } else {
                     unreachable!()
                 }

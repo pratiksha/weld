@@ -963,11 +963,11 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TOpenParen));
                 let data = try!(self.expr());
                 try!(self.consume(TComma));
-                let keyfunc = try!(self.expr());
+                let cmpfunc = try!(self.expr());
                 try!(self.consume(TCloseParen));
                 Ok(expr_box(Sort {
                                 data: data,
-                                keyfunc: keyfunc,
+                                cmpfunc: cmpfunc,
                             },
                             Annotations::new()))
             }
@@ -1110,6 +1110,7 @@ impl<'t> Parser<'t> {
             }
 
             TMinus => Ok(expr_box(Negate(try!(self.leaf_expr())), Annotations::new())),
+            TBang => Ok(expr_box(Not(self.leaf_expr()?), Annotations::new())),
 
             TMin => {
                 try!(self.consume(TOpenParen));
