@@ -143,6 +143,11 @@ impl ExprHash {
                     iter.kind.hash(&mut self.hasher);
                 }
             }
+            DistFor { ref iters, .. } => {
+                for iter in iters.iter() {
+                    iter.kind.hash(&mut self.hasher);
+                }
+            }
             // Other expressions (listed explicitly so we don't forget to add new ones). If the
             // expression doesn't have a non-Expr field, it goes here.
             Negate(_) | Not(_) | Broadcast(_) | Serialize(_) | ToVec{ .. } | MakeStruct { .. } | MakeVector { .. } |

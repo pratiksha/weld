@@ -210,6 +210,9 @@ impl GenEq for LlvmGenerator {
                 LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
                 result
             }
+            DistVec(_) => {
+                unimplemented!()
+            }
             Function(_,_) | Unknown => unreachable!()
         };
 

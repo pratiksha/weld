@@ -119,6 +119,12 @@ pub const CONF_DUMP_CODE_FORMATS_KEY: &'static str = "weld.compile.dumpCodeForma
 /// This parameter should be set for compilation.
 pub const CONF_ENABLE_BOUNDS_CHECKS_KEY: &'static str = "weld.compile.enableBoundsChecks";
 
+/// Enables distributing Weld code to the cluster.
+pub const CONF_DISTRIBUTE_KEY: &'static str = "weld.distribute";
+
+/// Number of workers to use for cluster tasks.
+pub const CONF_NWORKERS_KEY: &'static str = "weld.distribute.nWorkers";
+
 /// Default memory limit.
 pub const CONF_MEMORY_LIMIT_DEFAULT: i64 = 1000000000;
 
@@ -160,6 +166,12 @@ pub const CONF_ENABLE_BOUNDS_CHECKS_DEFAULT: bool = false;
 
 /// Default directory for dumping code.
 pub const CONF_DUMP_CODE_DIR_DEFAULT: &'static str = ".";
+
+/// Enables distributing Weld code to the cluster.
+pub const CONF_DISTRIBUTE_DEFAULT: bool = false;
+
+/// Number of workers to use for cluster tasks.
+pub const CONF_NWORKERS_DEFAULT: i32 = 1;
 
 /// Default set of optimization passes.
 pub const CONF_OPTIMIZATION_PASSES_DEFAULT: &[&'static str] =  &[

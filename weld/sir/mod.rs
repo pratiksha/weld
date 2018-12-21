@@ -62,6 +62,7 @@ pub enum StatementKind {
         ty: Type,
     },
     ParallelFor(ParallelForData),
+    DistributedFor(DistForData),
     Res(Symbol),
     Select {
         cond: Symbol,
@@ -88,7 +89,7 @@ pub enum StatementKind {
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ParallelForIter {
-    pub data: Symbol,
+    pub data: Symbol, // this could be a Vec or a DistVec
     pub start: Option<Symbol>,
     pub end: Option<Symbol>,
     pub stride: Option<Symbol>,
@@ -107,6 +108,14 @@ pub struct ParallelForData {
     pub idx_arg: Symbol,
     pub body: FunctionId,
     pub innermost: bool,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct DistForData {
+    pub data: Vec<ParallelForIter>,
+    pub args: Vec<Symbol>,
+    pub builder: Symbol,
+    pub func: String, // TODO this should be a constant string literal
 }
 
 impl StatementKind {
@@ -141,6 +150,28 @@ impl StatementKind {
                         vars.push(iter.end.as_ref().unwrap());
                         vars.push(iter.stride.as_ref().unwrap());
                     }
+                }
+            }
+            DistributedFor(ref data) => {
+                vars.push(&data.builder);
+
+                for iter in data.data.iter() {
+                    vars.push(&iter.data);
+                    if iter.shape.is_some() {
+                        vars.push(iter.start.as_ref().unwrap());
+                        vars.push(iter.end.as_ref().unwrap());
+                        vars.push(iter.stride.as_ref().unwrap());
+                        vars.push(iter.shape.as_ref().unwrap());
+                        vars.push(iter.strides.as_ref().unwrap());
+                    } else if iter.start.is_some() {
+                        vars.push(iter.start.as_ref().unwrap());
+                        vars.push(iter.end.as_ref().unwrap());
+                        vars.push(iter.stride.as_ref().unwrap());
+                    }
+                }
+
+                for arg in data.args {
+                    vars.push(arg);
                 }
             }
             UnaryOp {
@@ -1399,6 +1430,26 @@ fn gen_expr(expr: &Expr,
             } else {
                 compile_err!("Argument to For was not a Lambda: {}", func.pretty_print())
             }
+        }
+
+        /// The distributed For loop gets converted in LLVM into a set of RPC calls to servers,
+        /// each of which executes a normal For loop corresponding to the distributed computation.
+        /// The distributed For loop then performs a merge operation that depends on the builder kind.
+        /// In the case of a distributed appender, the merge operation generates a distributed vector.
+        /// Otherwise, the result is computed and materialized on the master.
+        ExprKind::DistFor {
+            ref iters,
+            ref args,
+            ref builder,
+            ref func,
+        } => {
+            let (cur_func, cur_block, builder_sym) =
+                gen_expr(builder, prog, cur_func, cur_block, tracker)?;
+            let res_sym = builder_sym.clone();
+
+            // TODO
+            
+            Ok((cur_func, cur_block, res_sym))
         }
 
         _ => compile_err!("Unsupported expression: {}", expr.pretty_print())

@@ -112,6 +112,8 @@ pub enum Type {
     Simd(ScalarKind),
     /// A variable-length vector.
     Vector(Box<Type>),
+    /// A vector distributed on the cluster.
+    DistVec(Box<Type>),
     /// A dictionary mapping keys to values.
     Dict(Box<Type>, Box<Type>),
     /// A mutable builder to construct results.
@@ -769,6 +771,19 @@ pub enum ExprKind {
         builder: Box<Expr>,
         func: Box<Expr>,
     },
+    /// Update a builder on the cluster.
+    /// This AST node is *only* constructed in generated Weld code during optimization.
+    DistFor {
+        iters: Vec<Iter>,
+        args: Vec<Expr>, /* A list of additional arguments to pass to the function. */
+        builder: Box<Expr>,
+        func: String, /* The lambda to be distributed. */
+        return_elem_ty: Box<Type>, /* The type of elements in the vector computed by func. */
+    },
+    /// Flatten a distributed vector, copying results into a new vector on the calling node.
+    Flatten {
+        dvec: Box<Expr>, /* This must have DistVec type. */
+    },
     /// Update a builder value, returning a new builder.
     Merge {
         builder: Box<Expr>,
@@ -789,7 +804,7 @@ impl ExprKind {
             Not(_) => "Not",
             Negate(_) => "Negate",
             Broadcast(_) => "Broadcast",
-            BinOp{ .. } => "BinOp",
+            BinOp { .. } => "BinOp",
             UnaryOp { .. } => "UnaryOp",
             Cast { .. } => "Cast",
             ToVec { .. } => "ToVec",
@@ -814,6 +829,7 @@ impl ExprKind {
             Deserialize { .. } => "Deserialize",
             NewBuilder(_) => "NewBuilder",
             For { .. } => "For",
+            DistFor { .. } => "DistFor",
             Merge { .. } => "Merge",
             Res { .. } => "Res",
         }
@@ -822,7 +838,7 @@ impl ExprKind {
     /// Returns `true` if the expression is over builders.
     pub fn is_builder_expr(&self) -> bool {
         match *self {
-            Merge { .. } | Res { .. } | For { .. } | NewBuilder(_) => true,
+            Merge { .. } | Res { .. } | For { .. } | DistFor { .. } | NewBuilder(_) => true,
             _ => false,
         }
     }
@@ -1052,6 +1068,31 @@ impl Expr {
                 res.push(func.as_ref());
                 res
             }
+            DistFor {
+                ref iters,
+                ref args,
+                ref builder,
+                ref func,
+            } => {
+                let mut res: Vec<&Expr> = vec![];
+                for iter in iters {
+                    res.push(iter.data.as_ref());
+                    if let Some(ref s) = iter.start {
+                        res.push(s);
+                    }
+                    if let Some(ref e) = iter.end {
+                        res.push(e);
+                    }
+                    if let Some(ref s) = iter.stride {
+                        res.push(s);
+                    }
+                }
+                for arg in args {
+                    res.push(arg);
+                }
+                res.push(builder.as_ref());
+                res
+            }
             If {
                 ref cond,
                 ref on_true,
@@ -1161,6 +1202,31 @@ impl Expr {
                 }
                 res.push(builder.as_mut());
                 res.push(func.as_mut());
+                res
+            }
+            DistFor {
+                ref mut iters,
+                ref mut args,
+                ref mut builder,
+                ref mut func,
+            } => {
+                let mut res: Vec<&mut Expr> = vec![];
+                for iter in iters {
+                    res.push(iter.data.as_mut());
+                    if let Some(ref mut s) = iter.start {
+                        res.push(s);
+                    }
+                    if let Some(ref mut e) = iter.end {
+                        res.push(e);
+                    }
+                    if let Some(ref mut s) = iter.stride {
+                        res.push(s);
+                    }
+                }
+                for arg in args {
+                    res.push(arg);
+                }
+                res.push(builder.as_mut());
                 res
             }
             If {

@@ -400,8 +400,8 @@ impl Vector {
     ///
     /// This returns the size (equivalently, the capacity) of the vector.
     pub unsafe fn gen_size(&mut self,
-                                builder: LLVMBuilderRef,
-                                vector: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+                           builder: LLVMBuilderRef,
+                           vector: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.size.is_none() {
             let mut arg_tys = [self.vector_ty];
             let ret_ty = self.i64_type();

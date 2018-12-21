@@ -366,6 +366,9 @@ impl SerHelper for LlvmGenerator {
                                           key_ser_fn,
                                           val_ser_fn)?
                 }
+                DistVec(_) => {
+                    unimplemented!()
+                }
                 Unknown | Simd(_) | Function(_,_) | Builder(_, _) => unreachable!(),
             };
 

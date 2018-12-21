@@ -326,6 +326,20 @@ fn to_string_impl(expr: &Expr, config: &mut PrettyPrintConfig) -> String {
             res
         }
 
+        DistFor { ref iters, ref args, ref builder, ref func } => {
+            let args = join("(", ",", ")", args.iter().map(|e| to_string_impl(e, config)));
+
+            config.indent += INDENT_LEVEL;
+            let res = format!("distfor({}{}{},{}{}{},{}{}{},{}{}\"{}\"{}{})",
+                    newline, indent_str, print_iters(iters, config),
+                    newline, indent_str, args,
+                    newline, indent_str, to_string_impl(builder, config),
+                    newline, indent_str, func,
+                    newline, less_indent_str);
+            config.indent -= INDENT_LEVEL;
+            res
+        }
+        
         If { ref cond, ref on_true, ref on_false } => {
             config.indent += INDENT_LEVEL;
             let res = format!("if({}{}{},{}{}{},{}{}{}{}{})",

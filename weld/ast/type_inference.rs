@@ -117,6 +117,9 @@ impl PushType for Type {
             (&mut Vector(ref mut elem), &Vector(ref other_elem)) => {
                 elem.push(other_elem)
             }
+            (&mut DistVec(ref mut elem), &DistVec(ref other_elem)) => {
+                elem.push(other_elem)
+            }
             (&mut Dict(ref mut key, ref mut value), &Dict(ref other_key, ref other_value)) => {
                 let mut changed = key.push(other_key)? || value.push(other_value)?;
                 key_hashable(key.as_ref())?;
@@ -799,7 +802,7 @@ impl InferTypesInternal for Expr {
             }
 
             Res { ref mut builder } => {
-                if let Builder(ref mut kind, _) = builder.ty {
+                if let Builder(ref mut kind, _) = builder.ty { 
                     self.ty.push(&kind.result_type())
                 } else if builder.ty == Unknown {
                     Ok(false)
@@ -889,6 +892,62 @@ impl InferTypesInternal for Expr {
 
                 // Push builder's type to our expression
                 changed |= self.ty.push(&builder.ty)?;
+                Ok(changed)
+            }
+
+            DistFor { ref mut iters, ref mut args, ref mut builder, ref mut func } => {
+                let mut changed = false;
+                // First, for each Iter, if it has a start, end, stride, etc., make sure the types of
+                // those expressions is Scalar(I64).
+                for iter in iters.iter_mut() {
+                    // For ScalarIter, SimdIter, and RangeIter, start, end and stride must all be
+                    // None or Some.
+                    if iter.start.is_some() {
+                        changed |= iter.start.as_mut().unwrap().ty.push_complete(Scalar(I64))?;
+                        changed |= iter.end.as_mut().unwrap().ty.push_complete(Scalar(I64))?;
+                        changed |= iter.stride.as_mut().unwrap().ty.push_complete(Scalar(I64))?;
+                    }
+
+                    // For NDIter, the same rule applies for shape and stride.
+                    if iter.strides.is_some() {
+                        changed |= iter.strides.as_mut().unwrap().ty.push_complete(Vector(Box::new(Scalar(I64))))?;
+                        changed |= iter.shape.as_mut().unwrap().ty.push_complete(Vector(Box::new(Scalar(I64))))?;
+                    }
+                }
+
+                // Now get the vector data types.
+                let mut elem_types: Vec<_> = iters.iter().map(|iter| {
+                    // If the iterator is a RangeIter, special case it -- the data must be a "dummy"
+                    // empty vector with type vec[i64].
+                    if iter.kind == IterKind::RangeIter {
+                        Ok(Scalar(I64))
+                    } else {
+                        // Make sure the Iter's data is a Vector or DistVec, and pull out its element kind.
+                        match iter.data.ty {
+                            Vector(ref elem) => Ok(elem.as_ref().clone()),
+                            DistVec(ref elem) => Ok(elem.as_ref().clone()),
+                            Unknown => Ok(Unknown),
+                            _ => compile_err!("Expected vector type in for loop iter, got {}", &iter.data.ty)
+                        }
+                    }
+                }).collect::<WeldResult<_>>()?;
+
+                // Convert the vector into a Type, which will either be a Struct or a single type.
+                let mut elem_types = if elem_types.len() == 1 {
+                    elem_types[0].clone()
+                } else {
+                    Struct(elem_types)
+                };
+
+                // Unlike For, DistFor implicitly acts as a Res.
+                result_ty = if let Builder(ref mut kind, _) = builder.ty {
+                    match *kind {
+                        Appender(ref elem) => DistVec(elem.clone()),
+                        _ => (&kind.result_type()) // Everything except Appender behaves just like a normal result of a builder.
+                    }
+                };
+                
+                changed |= self.ty.push(result_ty)?;
                 Ok(changed)
             }
         }

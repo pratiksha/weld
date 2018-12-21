@@ -31,6 +31,7 @@ use super::hash;
 use super::numeric;
 
 mod for_loop;
+mod dist_for_loop;
 
 pub mod appender;
 pub mod merger;
@@ -57,6 +58,8 @@ pub trait BuilderExpressionGen {
     unsafe fn gen_result(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     /// Generates code for the `ParallelFor` terminator.
     unsafe fn gen_for(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    /// Generates code for the `DistributedFor` terminator.
+    unsafe fn gen_dist_for(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     /// Generates code to define builder types.
     unsafe fn builder_type(&mut self, builder: &Type) -> WeldResult<LLVMTypeRef>;
 }
@@ -430,6 +433,21 @@ impl BuilderExpressionGen for LlvmGenerator {
         if let ParallelFor(ref parfor) = statement.kind {
             let output = statement.output.as_ref().unwrap();
             self.gen_for_internal(ctx, output, parfor)
+        } else {
+            unreachable!()
+        }
+    }
+
+    unsafe fn gen_dist_for(&mut self,
+                      ctx: &mut FunctionContext,
+                      statement: &Statement) -> WeldResult<()> {
+        use self::dist_for_loop::DistForLoopGenInternal;
+        if statement.output.is_none() {
+            unreachable!()
+        }
+        if let DistributedFor(ref distfor) = statement.kind {
+            let output = statement.output.as_ref().unwrap();
+            self.gen_dist_for_internal(ctx, output, distfor)
         } else {
             unreachable!()
         }

@@ -221,7 +221,7 @@ impl GenCmp for LlvmGenerator {
             }
             Vector(ref elem) => {
                 // Compare vectors with a loop. Check size like before.
-                let loop_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
+                let loop_block = LLVMAppendBasicBlockInContext(self.context, function,  c_str!(""));
                 let done_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
 
                 let left_vector = self.load(builder, left)?;
@@ -276,6 +276,9 @@ impl GenCmp for LlvmGenerator {
                 let result = LLVMBuildSelect(builder, bytes_equal, size_eq, result, c_str!(""));
                 
                 LLVMBuildRet(builder, result);
+            }
+            DistVec(_) => {
+                unimplemented!()
             }
             Function(_,_) | Unknown => {
                 unreachable!()

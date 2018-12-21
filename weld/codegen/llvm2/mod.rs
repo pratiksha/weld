@@ -94,6 +94,7 @@ macro_rules! c_str {
 mod builder;
 mod cmp;
 mod dict;
+mod dist_vector;
 mod eq;
 mod hash;
 mod intrinsic;
@@ -250,6 +251,7 @@ impl HasPointer for Type {
             Scalar(_) => false,
             Simd(_) => false,
             Vector(_) => true,
+            DistVector(_) => true,
             Dict(_, _) => true,
             Builder(_, _) => true,
             Struct(ref tys) => tys.iter().any(|ref t| t.has_pointer()),
@@ -274,6 +276,10 @@ pub struct LlvmGenerator {
     ///
     /// The key maps the *element type* to the vector's type reference and methods on it.
     vectors: FnvHashMap<Type, vector::Vector>,
+    /// A map tracking generated distributed vectors.
+    ///
+    /// The key maps the *element type* to the vector's type reference and methods on it.
+    dist_vectors: FnvHashMap<Type, dist_vector::DistVector>,
     /// A map tracking generated mergers.
     ///
     /// The key maps the merger type to the merger's type reference and methods on it.
@@ -1096,6 +1102,11 @@ impl LlvmGenerator {
                     let result = methods.gen_size(context.builder, child_value)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
                     Ok(())
+                } else if let DistVec(ref elem_type) = *child_type {
+                    let mut methods = self.vectors.get_mut(elem_type).unwrap();
+                    let result = methods.gen_size(context.builder, child_value)?;
+                    LLVMBuildStore(context.builder, result, output_pointer);
+                    Ok(())
                 } else if let Dict(_, _) = *child_type {
                     let pointer = {
                         let mut methods = self.dictionaries.get_mut(child_type).unwrap();
@@ -1114,6 +1125,13 @@ impl LlvmGenerator {
                 let child_type = context.sir_function.symbol_type(child)?;
                 if let Vector(_) = *child_type {
                     use self::vector::VectorExt;
+                    let index_value = self.load(context.builder, context.get_value(index)?)?;
+                    let pointer = self.gen_at(context.builder, child_type, child_value, index_value)?;
+                    let result = self.load(context.builder, pointer)?;
+                    LLVMBuildStore(context.builder, result, output_pointer);
+                    Ok(())
+                } else if let DistVec(_) = *child_type {
+                    use self::dist_vector::DistVectorExt;
                     let index_value = self.load(context.builder, context.get_value(index)?)?;
                     let pointer = self.gen_at(context.builder, child_type, child_value, index_value)?;
                     let result = self.load(context.builder, pointer)?;
@@ -1218,6 +1236,10 @@ impl LlvmGenerator {
             ParallelFor(_) => {
                 use self::builder::BuilderExpressionGen;
                 self.gen_for(context, statement)
+            }
+            DistributedFor(_) => {
+                use self::builder::BuilderExpressionGen;
+                self.gen_dist_for(context, statement)
             }
             Res(_) => {
                 use self::builder::BuilderExpressionGen;
@@ -1496,6 +1518,18 @@ impl LlvmGenerator {
                     self.vectors.insert(elem_type.as_ref().clone(), vector);
                 }
                 self.vectors.get(elem_type).unwrap().vector_ty
+            }
+            DistVec(ref elem_type) => {
+                // Vectors are a named type, so only generate the name once.
+                if !self.dist_vectors.contains_key(elem_type) {
+                    let llvm_elem_type = self.llvm_type(elem_type)?;
+                    let dvec = dist_vector::DistVector::define("dvec",
+                                                               llvm_elem_type,
+                                                               self.context,
+                                                               self.module);
+                    self.dist_vectors.insert(elem_type.as_ref().clone(), dvec);
+                }
+                self.dist_vectors.get(elem_type).unwrap().vector_ty // TODO what should this return?
             }
             Function(_, _) | Unknown => unreachable!(),
         };

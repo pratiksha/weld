@@ -107,6 +107,10 @@ pub struct ParsedConf {
     pub llvm: LLVMConfig,
     /// Options for writing code to a file.
     pub dump_code: DumpCodeConfig,
+    /// Enables distributing tasks on the cluster.
+    pub distribute: bool,
+    /// Number of workers to use for cluster tasks.
+    pub nworkers: i32,
 }
 
 impl Default for ParsedConf {
@@ -121,6 +125,8 @@ impl Default for ParsedConf {
             enable_bounds_checks: CONF_ENABLE_BOUNDS_CHECKS_DEFAULT,
             llvm: LLVMConfig::default(),
             dump_code: DumpCodeConfig::default(),
+            distribute: CONF_DISTRIBUTE_DEFAULT,
+            nworkers: CONF_NWORKERS_DEFAULT,
         }
     }
 }
@@ -174,6 +180,10 @@ impl ParsedConf {
                                                 parse_passes)?,
             enable_bounds_checks: conf.parse_str(CONF_ENABLE_BOUNDS_CHECKS_KEY,
                                                  CONF_ENABLE_BOUNDS_CHECKS_DEFAULT)?,
+            distribute: conf.parse_str(CONF_DISTRIBUTE_KEY,
+                                       CONF_DISTRIBUTE_DEFAULT)?,
+            nworkers: conf.parse_str(CONF_NWORKERS_KEY,
+                                     CONF_NWORKERS_DEFAULT)?,
             llvm: LLVMConfig {
                 opt_level: conf.parse_str(CONF_LLVM_OPTIMIZATION_LEVEL_KEY,
                                           CONF_LLVM_OPTIMIZATION_LEVEL_DEFAULT)?,
@@ -199,6 +209,7 @@ impl ParsedConf {
                                         DumpCodeFormat::all().into_iter().collect::<HashSet<_>>(),
                                         parse_dump_code_formats)?,
             }
+
         };
         Ok(conf)
     }
