@@ -156,7 +156,7 @@ impl DistForLoopGenInternal for LlvmGenerator {
         let sizes = match data_size {
             Some(ref size) => {
                 // at least one iter needs to be sharded. Generate shards.
-                gen_partitions(ctx, func, size)
+                self.gen_partitions(ctx, func, size)
             }
             None => {
                 // all iters were already distributed. This value will never be used
@@ -259,13 +259,16 @@ impl DistForLoopGenInternal for LlvmGenerator {
         Ok(arg_ptrs)
     }
     
-    /// Generates code to call an external C RPC that dispatches the inner loop, and retrieves and merges the results.
+    /// Generates code to call an external C RPC that dispatches one instance of the inner loop.
     unsafe fn gen_rpc(&mut self,
                       ctx: &mut FunctionContext,
                       func: &String,
                       args: &Vec<LLVMValueRef>,
                       distfor: &DistForData) -> WeldResult<()> {
-        let output_pointer = ctx.get_value(output)?;
+        // Weld will allocate space for returned values on the remote machine.
+        
+        
+        let output_pointer = ctx.get_value(output)?; 
         let return_ty = self.llvm_type(ctx.sir_function.symbol_type(output)?)?;
         let mut arg_tys = vec![];
 

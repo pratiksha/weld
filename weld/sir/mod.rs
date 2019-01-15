@@ -62,7 +62,6 @@ pub enum StatementKind {
         ty: Type,
     },
     ParallelFor(ParallelForData),
-    DistributedFor(DistForData),
     Res(Symbol),
     Select {
         cond: Symbol,
@@ -84,7 +83,17 @@ pub enum StatementKind {
     UnaryOp {
         op: UnaryOpKind,
         child: Symbol,
-    }
+    },
+
+    // Special functions to generate distributed for loops.
+    // These will compile to generated LLVM to perform each operation (partition vectors,
+    // generate input args, generate RPCs, and merge the results appropriately).
+    Partition(DistForData),
+    GenArgs(DistForData),
+
+    // This will compile to a parallel for loop over the input data that generates RPCs,
+    // followed by a builder-specific merge of the results.
+    DistributedFor(DistForData),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -1448,6 +1457,30 @@ fn gen_expr(expr: &Expr,
             let res_sym = builder_sym.clone();
 
             // TODO
+
+            // Generate appropriate mergers corresponding to each builder.
+            match builder.kind {
+                // Appenders are materialized as DistVecs.
+                Appender(ref elem) => {
+
+                    exprs::for_expr()?;
+                }
+                // Mergers can preserve the original merge operation.
+                Merger(ref elem, _) => {
+                    
+                }
+
+                // Aggregators require an additional loop to aggregate over the result dicts.
+                DictMerger(ref key, ref value, _) => {
+
+                }
+                GroupMerger(ref key, ref value) => {
+
+                }
+
+                // VecMergers are not supported in DistFor.
+                VecMerger(_, _) => compile_err!("VecMerger unsupported in DistFor")
+            }
             
             Ok((cur_func, cur_block, res_sym))
         }

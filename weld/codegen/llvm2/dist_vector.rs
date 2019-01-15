@@ -220,7 +220,7 @@ impl DistVector {
             let elements = LLVMBuildBitCast(builder, bytes, LLVMPointerType(self.vec_ty, 0), c_str!("elements"));
 
             // push all the elements
-            for i, vec in vecs.iter().enumerate() {
+            for (i, vec) in vecs.iter().enumerate() {
                 let insert_ptr = LLVMBuildStructGEP(ctx.builder,
                                                     elements,
                                                     i as u32,
@@ -237,7 +237,8 @@ impl DistVector {
         }
         
         let mut args = [size, run];
-        return Ok(LLVMBuildCall(builder, self.new.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+
+        Ok(LLVMBuildCall(builder, self.new.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
     /// Generates the `flatten` method on vectors and calls it.
