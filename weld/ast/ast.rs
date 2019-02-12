@@ -75,6 +75,28 @@ impl Annotations {
             .map(|v| v.as_ref())
     }
 
+    /// Set an annotation with key associated with a boolean value.
+    ///
+    /// true is returned if a value was previously set for the key.
+    pub fn set_bool<K: Into<String>>(&mut self, key: K) -> bool {
+        let prev = self.set(key, "true");
+        match prev {
+            None => false,
+            Some(value) => true
+        }
+    }
+
+    /// Get the boolean annotation value associated with a key.
+    ///
+    /// Returns `false` iff the key was not set.
+    pub fn get_bool<K: AsRef<str>>(&self, key: K) -> bool {
+        let annot = self.get(key);
+        match annot {
+            None => false,
+            Some(value) => true
+        }
+    }
+
     /// Return whether the annotations are empty.
     pub fn is_empty(&self) -> bool {
         self.values.as_ref().map(|f| f.len()).unwrap_or(0) == 0
@@ -83,6 +105,28 @@ impl Annotations {
     /// Clears the annotations.
     pub fn clear(&mut self) {
         self.values = None;
+    }
+
+    /// Clears a single annotation.
+    ///
+    /// The previous value for this key is returned if there was one.
+    pub fn remove<K: AsRef<str>>(&mut self, key: K) -> Option<String> {
+        self.values
+            .as_mut()
+            .unwrap()
+            .remove(key.as_ref())
+    }
+
+    /// Clears a boolean annotation.
+    ///
+    /// true is returned if a value was previously set for the key,
+    /// and false otherwise.
+    pub fn remove_bool<K: AsRef<str>>(&mut self, key: K) -> bool {
+        let annot = self.remove(key);
+        match annot {
+            None => false,
+            Some(value) => value.parse::<bool>().unwrap()
+        }
     }
 }
 
@@ -100,6 +144,23 @@ impl fmt::Display for Annotations {
             .join(",");
 
         write!(f, "@({})", annotations)
+    }
+}
+
+/// Utilities for propagating an annotation from one expression to another
+pub trait ApplyAnnotation {
+    fn apply_bool_annotation<K: AsRef<str> + Into<String>>(&mut self, other: &Self, annot: K);
+}
+
+impl ApplyAnnotation for Expr {
+    fn apply_bool_annotation<K: AsRef<str> + Into<String>>(&mut self, other: &Expr, annot: K) {
+        let other_annot = other.annotations.get_bool(&annot);
+        match other_annot {
+            true => {
+                self.annotations.set_bool(annot);
+            }
+            false => {}
+        }
     }
 }
 
@@ -1320,6 +1381,7 @@ impl Expr {
                         *self = e;
                         return self.transform_and_continue_res(func);
                     }
+
                     (Some(e), false) => {
                         *self = e;
                     }

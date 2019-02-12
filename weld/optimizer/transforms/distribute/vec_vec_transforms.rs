@@ -10,13 +10,14 @@ use ast::constructors;
 use util::SymbolGenerator;
 
 use optimizer::transforms::distribute::distribute;
+use optimizer::transforms::distribute::distribute::SHARDED_ANNOTATION;
 
 const LOOKUP_SYM: &str = "lookup_index";
 
 /// Transform a Lookup on a vec[T] into an equivalent Lookup on a vec[vec[T]].
 pub fn transform_lookup(expr: &mut Expr) -> WeldResult<Expr> {
     if let Lookup { ref data, ref index } = expr.kind {
-        if distribute::get_sharded(&data) {
+        if (&data).annotations.get_bool(SHARDED_ANNOTATION) {
             if let Vector(ref ty) = data.ty {
                 if let Vector(ref ty) = **ty {
                     let mut sym_gen = SymbolGenerator::from_expression(expr);
@@ -58,7 +59,7 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
     if let Res { ref builder } = expr.kind {
         /* this Res will be a sharded vector when it is materialized */
         print!("type: {}\n", &expr.ty);
-        if distribute::get_sharded(&expr) {
+        if (&expr).annotations.get_bool(SHARDED_ANNOTATION) {
             if let Vector(ref ty) = expr.ty {
                 if let Vector(ref ty) = (**ty) {
                     // iterate over shards

@@ -10,7 +10,7 @@ use optimizer::transforms::distribute::code_util;
 use optimizer::transforms::distribute::distribute::vec_info;
 use optimizer::transforms::distribute::shard;
 
-const DISPATCH_SYM: &str = "dispatch_one";
+const DISPATCH_SYM: &str = "dispatch";
 
 /// non_iter_args and iters should not have any names in common.
 /// Mutates shard_idents and params.

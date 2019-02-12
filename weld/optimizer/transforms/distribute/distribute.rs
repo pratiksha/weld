@@ -4,11 +4,12 @@
 use std::collections::HashSet;
 
 use ast::*;
+use ast::constructors;
 use ast::ExprKind::*;
 use ast::Type::*;
 use conf::ParsedConf;
 use error::*;
-use ast::constructors;
+use fnv::FnvHashMap;
 use util::SymbolGenerator;
 
 use optimizer::transforms::distribute::code_util;
@@ -19,26 +20,8 @@ use optimizer::transforms::distribute::shard::*;
 use optimizer::transforms::distribute::sort::*;
 use optimizer::transforms::distribute::vec_vec_transforms::*;
 
-pub const SHARDED_ANNOTATION: &str = "sharded";
-
-/* Names of required C UDFs, implemented in Clamor. */
-const SHARD_SYM: &str = "shard_data";
-const DISPATCH_SYM: &str = "dispatch";
-const DISPATCH_ONE_SYM: &str = "dispatch_one";
-
-/// If the sharded annotation is set, return it.
-pub fn get_sharded(e: &Expr) -> bool {
-    let annot = e.annotations.get(SHARDED_ANNOTATION);
-    match annot {
-        None => false,
-        Some(value) => value.parse::<bool>().unwrap()
-    }
-}
-
-/// Set the sharded annotation on this expr.
-pub fn set_sharded(e: &mut Expr, value: bool) {
-    e.annotations.set(SHARDED_ANNOTATION, value.to_string());
-}
+pub const SHARDED_ANNOTATION: &str = "sharded"; // Marks non-contiguous data
+pub const DISTRIBUTE_ANNOTATION: &str = "distribute"; // Marks outer loops that will be distributed
 
 /// Information about vectors that will be inputs to subprograms.
 pub struct vec_info {
@@ -67,40 +50,15 @@ fn get_parameters(e: &Expr) -> HashSet<Parameter> {
     syms.difference(&defs).cloned().collect() // return all elements that are accessed but not defined
 }
 
-/// Traverse the expression and recursively set the 'sharded' annotations wherever the variable `name` is used.
-/// This annotations indicates that a vector of vectors is a set of shards of a single vector rather than a normal nested vector.
-/// TODO: currently assumes an entire sharded vector will not be passed as an argument to a Lambda.
-// fn set_sharded(expr: &mut Expr, name: String) {
-//     let mut names = vec![name];
-    
-//     expr.traverse_mut(&mut |ref mut e| {
-//         if let Ident(ref sym) = e.kind {
-//             if names.contains(&sym.name()) {
-//                 e.annotations.set(SHARDED_ANNOTATION, "true");
-//                 names.push(sym.name().clone());
-//             }
-//         } else if let Let { ref name, ref mut value, .. } = e.kind {
-//             let mut set = false;
-//             if let Ident(ref sym) = value.kind {
-//                 if names.contains(&sym.name()) {
-//                     set = true;
-//                     names.push(sym.name().clone());
-//                 }
-//             }
-
-//             if set {
-//                 value.annotations.set(SHARDED_ANNOTATION, "true");
-//             }
-//         }
-//     });
-// }
-
 /// Convert a For into a distributed For.
 /// Generate UDF to dispatch RPCs for this function.
 /// Shard data according to number of available workers.
 /// Keep track of variables that aren't sharded, and pass to workers.
 pub fn gen_distributed_loop(e: &Expr, nworkers_conf: &i32) -> WeldResult<Option<Expr>> {
-    print!("in distribute: {}\n", e.pretty_print());
+    let mut print_conf = PrettyPrintConfig::new();
+    print_conf.show_types = true;
+    print!("in distribute: {}\n", e.pretty_print_config(&print_conf));
+
     if let For { ref iters, ref builder, ref func } = e.kind {
         print!("getting iters\n");
         let mut iter_data = vec![];
@@ -110,7 +68,7 @@ pub fn gen_distributed_loop(e: &Expr, nworkers_conf: &i32) -> WeldResult<Option<
         let mut len_opt: Option<Expr> = None;
         for it in iters.iter() {
             if let Ident(ref sym) = (*it).data.kind {
-                let is_sharded = get_sharded(&(*it).data);
+                let is_sharded = (&(*it).data).annotations.get_bool(SHARDED_ANNOTATION);
                 if is_sharded {
                     // already sharded. it type is a vec[vec[T]]
                     if let Vector(ref ty) = (*it).data.ty {
@@ -230,68 +188,173 @@ pub fn gen_distributed_loop(e: &Expr, nworkers_conf: &i32) -> WeldResult<Option<
     }
 }
 
-/// Convert top-level For loops in this expr into distributed For loops.
-/// Transform any vector operations on a distributed vector appropriately to be compatible with the new distributed input.
-pub fn distribute(expr: &mut Expr, nworkers_conf: &i32) {
-    /* First transform-up any loops that need to be sharded. */
-    expr.transform_up(&mut |ref mut e| {
-        print!("transform up: {}\n", e.pretty_print());
-        if let For { ref iters, ref builder, ref func } = e.kind {
-            /* Check that iters are all Idents. If not, wrap in an Ident before distributing. */
-            let (ident_loop, new_symbols) = iters_to_idents(e).unwrap();
-            let mut dist_loop = gen_distributed_loop(&ident_loop, nworkers_conf).unwrap().unwrap();
-            for (sym, value) in new_symbols.iter() {
-                dist_loop = constructors::let_expr((*sym).clone(), (*value).clone(), dist_loop).unwrap();
+pub fn annotate_distribute(e: &Expr) -> Expr {
+    let mut new_expr = e.clone();
+    new_expr.annotations.set_bool(DISTRIBUTE_ANNOTATION);
+    new_expr
+}
+
+/// Returns true if any subexpression has the `distribute` annotation.
+pub fn contains_distribute(expr: &Expr) -> bool {
+    let mut ret = false;
+    expr.traverse(&mut |ref e| {
+        if e.annotations.get_bool(DISTRIBUTE_ANNOTATION) {
+            ret = true;
+        }
+    });
+    ret
+}
+
+/// Returns `true` iff `expr` only accesses vectors in `computed`.
+pub fn check_idents(expr: &Expr, computed: &FnvHashMap<Symbol, bool>) -> bool {
+    let mut ret = true;
+    expr.traverse(&mut |ref e| {
+        if let Ident(ref sym) = e.kind {
+            match e.ty {
+                Vector(_) => {
+                    if computed.get(&sym) == None {
+                        println!("could not find sym: {}", sym.name());
+                        ret = false;
+                    }
+                },
+                _ => {}
             }
-            return Some(dist_loop);
-        } else if let Lookup { ref data, ref index } = e.kind {
-            print!("got lookup\n");
-            if let Res { ref builder } = data.kind {
-                print!("got res\n");
-                let is_sharded = get_sharded(&builder);
-                if is_sharded {
-                    let mut new_e = e.clone();
-                    set_sharded(&mut new_e, true);
-                    return Some(new_e);
+        }
+    });
+    ret
+}
+
+/// Distribute any top-level loops that access only Idents in `computed`.
+/// Return the names of any idents that are computed by the new distributed loops
+/// (i.e., vectors that may now be sharded).
+pub fn distribute_transform(expr: &mut Expr, computed: &mut FnvHashMap<Symbol, bool>, nworkers_conf: &i32) {
+    expr.transform_and_continue(&mut |ref mut e| {
+        if e.annotations.get_bool(DISTRIBUTE_ANNOTATION) {
+            if let For { ref iters, ref builder, ref func } = e.kind {
+                let mut all_computed = true;
+                for iter in iters.iter() {
+                    all_computed &= check_idents(&(*iter.data), computed);
                 }
+                all_computed &= check_idents(builder, computed);
+                all_computed &= check_idents(func, computed);
+
+                if !all_computed {
+                    return (None, true)
+                }
+
+                /* Check that iters are all Idents. If not, wrap in an Ident before distributing. */
+                let (ident_loop, new_symbols) = iters_to_idents(e).unwrap();
+                let mut dist_loop = gen_distributed_loop(&ident_loop, nworkers_conf).unwrap().unwrap();
+                for (sym, value) in new_symbols.iter() {
+                    dist_loop = constructors::let_expr((*sym).clone(),
+                                                       (*value).clone(), dist_loop).unwrap();
+                }
+                return (Some(dist_loop), false);
             }
-        } else if let Res { ref builder } = e.kind {
-            print!("got res\n");
-            let is_sharded = get_sharded(&builder);
-            if is_sharded {
-                print!("got sharded\n");
-                let mut new_e = constructors::result_expr((**builder).clone()).unwrap(); /* update the type */
-                set_sharded(&mut new_e, true);
-                print!("result type: {}\n", &new_e.ty);
-                print!("result builder type: {}\n", &builder.ty);
-                return Some(new_e);
-            } 
-        } else if let Let { ref name, ref value, ref body } = e.kind {
-            print!("got let\n");
-            if let Res { ref builder } = body.kind {
-                print!("got res\n");
-                if let For { ref iters, ref builder, ref func } = builder.kind {
-                    print!("got for\n");
-                    let is_sharded = get_sharded(&builder);
-                    if is_sharded {
-                        print!("sharded\n");
-                        if let Builder(ref bk, _) = builder.ty {
-                            print!("got builder\n");
-                            if let BuilderKind::Appender(_) = bk {
-                                print!("got appender\n");
-                                let mut replace_let = e.clone(); // TODO sharded should be propagated to Idents using the name as well
-                                set_sharded(&mut replace_let, true);
-                                return Some(replace_let);
-                            }
-                        }
+        }
+
+        (None, true)
+    });
+}
+
+/// Propagate the type effects of sharding from children upwards to parents.
+fn propagate_sharded(e: &mut Expr, computed: &mut FnvHashMap<Symbol, bool>) -> Option<Expr> {
+    if let Lookup { ref data, ref index } = e.kind {
+        if let Res { ref builder } = data.kind {
+            let mut new_e = e.clone();
+            new_e.apply_bool_annotation(&builder, SHARDED_ANNOTATION);
+            return Some(new_e)
+        }
+    } else if let Res { ref builder } = e.kind {
+        /* The annotation has to be updated, and the builder will also have a new type. */
+        let is_sharded = (&builder).annotations.get_bool(SHARDED_ANNOTATION);
+        if is_sharded {
+            let mut new_e = constructors::result_expr((**builder).clone()).unwrap(); /* update the type */
+            new_e.apply_bool_annotation(&builder, SHARDED_ANNOTATION);
+            return Some(new_e);
+        } 
+    } else if let Let { ref name, ref value, ref body } = e.kind {
+        if let Res { ref builder } = value.kind {
+            println!("got res");
+            if let For { ref iters, ref builder, ref func } = builder.kind {
+                println!("got for");
+                if let Builder(ref bk, _) = builder.ty {
+                    print!("got builder\n");
+                    if let BuilderKind::Appender(_) = bk {
+                        print!("got appender\n");
+                        let mut replace_let = e.clone();
+                        replace_let.apply_bool_annotation(&builder, SHARDED_ANNOTATION);
+                        computed.insert(name.clone(), true);
+                        return Some(replace_let)
                     }
                 }
             }
         }
+    }
 
-        return None;
+    None
+}
+
+/// Convert top-level For loops in this expr into distributed For loops.
+/// Transform any vector operations on a distributed vector appropriately to be compatible with the new distributed input.
+/// TODO iters_to_idents.
+pub fn distribute(expr: &mut Expr, nworkers_conf: &i32) {
+    /* First annotate all top-level For loops to be distributed. */
+    expr.transform_and_continue(&mut |ref mut e| {
+        if let For { ref iters, ref builder, ref func } = e.kind {
+            return (Some(annotate_distribute(&e)), false);
+        }
+
+        return (None, true)
     });
+    
+    /* Start by distributing loops only over Idents that are not themselves
+       the product of distributed loops, because those might become sharded vectors.
+       After each pass, we can add any Idents whose type (vec[T] or vec[vec[T]] or otherwise) we now know,
+       and distribute any loops involving those inputs in the next pass.
+       Iterate until no top-level distribute loops remain. */
+    let mut computed = FnvHashMap::default();
+    if let Lambda { ref params, ref body } = expr.kind {
+        for p in params.iter() {
+            computed.insert(p.name.clone(), false); // we can assume inputs are contiguous in memory
+        }
+    }
 
+    while contains_distribute(&expr) {
+        /* Distribute as many loops as we can. */
+        let mut print_conf = PrettyPrintConfig::new();
+        print_conf.show_types = true;
+        println!("distributing... {}", expr.pretty_print_config(&print_conf));
+        distribute_transform(expr, &mut computed, nworkers_conf);
+
+        /* Now some Idents might be sharded. Propagate the sharded annotation upwards... */
+        println!("propagate up...");
+        expr.transform_up(&mut |ref mut e| {
+            propagate_sharded(e, &mut computed)
+        });
+
+        println!("propagate down...");
+        /* ... and then downwards to children. */
+        expr.transform_and_continue(&mut |ref mut e| {
+            if let Ident(ref sym) = e.kind {
+                let annotation_set = e.annotations.get_bool(SHARDED_ANNOTATION);
+                let is_sharded = match computed.get(&sym) {
+                    Some(value) => { *value },
+                    None => false
+                };
+                if !annotation_set && is_sharded {
+                    let mut annotated = e.clone();
+                    annotated.ty = Vector(Box::new(e.ty.clone()));
+                    annotated.annotations.set_bool(SHARDED_ANNOTATION);
+                    return (Some(annotated), true);
+                }
+            }
+
+            (None, true)
+        });
+    }
+
+    println!("done, flatten....");
     /* Finally, flatten the topmost result that will be returned to the calling program. */
     expr.transform_once(&mut |ref mut e| Some(flatten_toplevel_func(e).unwrap()));
 }
