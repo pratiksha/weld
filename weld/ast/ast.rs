@@ -77,23 +77,34 @@ impl Annotations {
 
     /// Set an annotation with key associated with a boolean value.
     ///
-    /// true is returned if a value was previously set for the key.
-    pub fn set_bool<K: Into<String>>(&mut self, key: K) -> bool {
-        let prev = self.set(key, "true");
+    /// The previous value for this key is returned if there was one. 
+    pub fn set_bool<K: Into<String>>(&mut self, key: K, value: bool) -> Option<bool> {
+        let prev = match value {
+            true => self.set(key, "true"),
+            false => self.set(key, "false")
+        };
+        
         match prev {
-            None => false,
-            Some(value) => true
+            Some(x) => {
+                match x.as_ref() {
+                    "true"  => Some(true),
+                    "false" => Some(false),
+                    _ => None
+                }
+            }
+            None => None
         }
     }
 
     /// Get the boolean annotation value associated with a key.
     ///
-    /// Returns `false` iff the key was not set.
-    pub fn get_bool<K: AsRef<str>>(&self, key: K) -> bool {
-        let annot = self.get(key);
-        match annot {
-            None => false,
-            Some(value) => true
+    /// Returns `None` if the key was not found.
+    pub fn get_bool<K: AsRef<str>>(&self, key: K) -> Option<bool> {
+        match self.get(key) {
+            Some("true") => Some(true),
+            Some("false") => Some(false),
+            Some(_) => None,
+            None => None
         }
     }
 
@@ -156,10 +167,10 @@ impl ApplyAnnotation for Expr {
     fn apply_bool_annotation<K: AsRef<str> + Into<String>>(&mut self, other: &Expr, annot: K) {
         let other_annot = other.annotations.get_bool(&annot);
         match other_annot {
-            true => {
-                self.annotations.set_bool(annot);
-            }
-            false => {}
+            Some(x) => {
+                self.annotations.set_bool(annot, x);
+            },
+            None => {}
         }
     }
 }
@@ -1371,6 +1382,32 @@ impl Expr {
     }
 
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
+    /// Returns as soon as any one child has been transformed successfully.
+    pub fn transform_or_continue<F>(&mut self, func: &mut F) -> bool
+    where F: FnMut(&mut Expr) -> (Option<Expr>, bool)
+    {
+        match func(self) {
+            (Some(e), true) => {
+                *self = e;
+                return false;
+            }
+            (Some(e), false) => {
+                *self = e;
+                return false;
+            }
+            (None, true) => {
+                for c in self.children_mut() {
+                    if ( !c.transform_or_continue(func) ) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            (None, false) => { return true; }
+        }
+    }
+
+    /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     /// Supports returning an error, which is treated as returning (None, false)
     pub fn transform_and_continue_res<F>(&mut self, func: &mut F)
         where F: FnMut(&mut Expr) -> WeldResult<(Option<Expr>, bool)>
@@ -1429,6 +1466,22 @@ impl Expr {
         if let Some(e) = func(self) {
             *self = e;
         }
+    }
+
+    /// Recursively transforms an expression in place by running a function first on its children, then on the root
+    /// expression itself; this can be more efficient than `transform` for some cases
+    pub fn transform_up_res<F>(&mut self, func: &mut F)
+        where F: FnMut(&mut Expr) -> WeldResult<Option<Expr>>
+    {
+        for c in self.children_mut() {
+            c.transform_up_res(func);
+        }
+        
+        if let Ok(res) = func(self) {
+            if let Some(e) = res {
+                *self = e;
+            }
+        } 
     }
 
     /// Transform an expression by replacing its kind with another `ExprKind`.

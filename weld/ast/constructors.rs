@@ -429,6 +429,8 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
     for ty in vec_tys.iter() {
         if let Vector(ref elem_ty) = *ty {
             vec_elem_tys.push(*elem_ty.clone())
+        } else {
+            println!("non vector type: {}", &ty);
         }
     }
 
@@ -488,14 +490,14 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
                 Struct(vec_elem_tys.clone())
             };
 
-            if *param_2_ty != composite_ty {
-                return compile_err!("Internal error: Mismatched types in for_expr - function zipped elem type",);
-            }
+            /* if *param_2_ty != composite_ty {
+                return compile_err!("Internal error: Mismatched types in for_expr - function zipped elem type {} {}", param_2_ty, &composite_ty);
+            } */
         }
 
         // Function return type should match builder type.
         if ret_ty.as_ref() != &builder_ty {
-            return compile_err!("Internal error: Mismatched types in for_expr - function return type");
+            return compile_err!("Internal error: Mismatched types in for_expr - function return type: {} {}", ret_ty.as_ref(), &builder_ty);
         }
     }
 
@@ -552,12 +554,15 @@ pub fn merge_expr(builder: Expr, value: Expr) -> WeldResult<Expr> {
             VecMerger(ref elem_ty, _) => {
                 if let Struct(ref tys) = value.ty {
                     if tys.len() != 2 {
+                        println!("tys.len is {}", tys.len());
                         return err;
                     }
                     if tys[0] != Scalar(ScalarKind::I64) {
+                        println!("tys[0] is {}", tys[0]);
                         return err;
                     }
                     if &tys[1] != elem_ty.as_ref() {
+                        println!("mismatch: {} {}", &tys[1], elem_ty.as_ref());
                         return err;
                     }
                 } else {

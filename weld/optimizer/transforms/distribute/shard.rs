@@ -44,7 +44,9 @@ fn vec_info_to_shard(vi: &vec_info,
                      partition_loop_idx: &Expr,
                      partition_loop_elt: &Expr) -> WeldResult<Expr> {
     if vi.is_sharded {
-        constructors::lookup_expr(vi.original_ident.clone(), partition_loop_idx.clone())
+        let mut new_ident = vi.original_ident.clone();
+        new_ident.ty = Vector(Box::new(new_ident.ty)); // The type isn't correct at transform time.
+        constructors::lookup_expr(new_ident, partition_loop_idx.clone())
     } else {
         partition_to_slice(&vi.original_ident, &partition_loop_elt)
     }
@@ -65,6 +67,7 @@ pub fn partitions_to_shards(iters: &Vec<vec_info>,
 
     for vi in iters.iter() {
         if let Ident(ref sym) = vi.ident.kind {
+            println!("********** Ident type: {} {}", sym.name(), vi.ident.ty);
             shards.push(vec_info_to_shard(vi, partition_loop_idx, partition_loop_elt).unwrap());
             params.push( Parameter{ name: sym.clone(), ty: vi.ident.ty.clone() } );
         } else {

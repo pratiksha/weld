@@ -10,13 +10,54 @@ use ast::constructors;
 use util::SymbolGenerator;
 
 use optimizer::transforms::distribute::distribute;
+use optimizer::transforms::distribute::distribute::get_sharded;
 use optimizer::transforms::distribute::distribute::SHARDED_ANNOTATION;
 
 const LOOKUP_SYM: &str = "lookup_index";
+const SLICE_SYM: &str = "slice";
 
 /// Transform a Lookup on a vec[T] into an equivalent Lookup on a vec[vec[T]].
-pub fn transform_lookup(expr: &mut Expr) -> WeldResult<Expr> {
+/// Precondition: data field of Lookup is a sharded vector.
+pub fn gen_distributed_lookup(expr: &Expr)
+                        -> WeldResult<Expr> {
     if let Lookup { ref data, ref index } = expr.kind {
+        let mut sym_gen = SymbolGenerator::from_expression(expr);
+        
+        let data_sym = sym_gen.new_symbol("data");
+        let data_ident = constructors::ident_expr(data_sym.clone(), Vector(Box::new(data.ty.clone())))?;
+        let index_sym = sym_gen.new_symbol("index");
+        let index_ident = constructors::ident_expr(index_sym.clone(), index.ty.clone())?;
+        
+        /* call UDF to compute the new index */
+        let new_idx_expr = constructors::cudf_expr(LOOKUP_SYM.to_string(),
+                                                   vec![data_ident.clone(),
+                                                        index_ident.clone()],
+                                                   Struct(vec![Scalar(ScalarKind::I64),
+                                                               Scalar(ScalarKind::I64)])).unwrap();
+        let index_let = constructors::let_expr(index_sym.clone(), (**index).clone(),
+                                               new_idx_expr.clone())?;
+        
+        let idx_sym = sym_gen.new_symbol("idx");
+        let idx_ident = constructors::ident_expr(idx_sym.clone(), new_idx_expr.ty.clone())?;
+        
+        let shard_expr = constructors::lookup_expr(data_ident.clone(),
+                                                   constructors::getfield_expr(idx_ident.clone(), 0)?)?;
+        let elt_expr = constructors::lookup_expr(shard_expr,
+                                                 constructors::getfield_expr(idx_ident.clone(), 1)?)?;
+        
+        /* don't compute index twice */
+        let idx_let = constructors::let_expr(idx_sym.clone(), index_let, elt_expr)?;
+        let data_let = constructors::let_expr(data_sym.clone(), (**data).clone(), idx_let)?;
+        return Ok(data_let)
+    }
+
+    // else invalid or not sharded -- do nothing
+    return Ok(expr.clone())
+}
+
+/*/// Transform a Slice on a vec[T] into an equivalent Slice returning vec[vec[T]].
+pub fn transform_slice(expr: &mut Expr) -> WeldResult<Expr> {
+    if let Slice { ref data, ref index, ref size } = expr.kind {
         if (&data).annotations.get_bool(SHARDED_ANNOTATION) {
             if let Vector(ref ty) = data.ty {
                 if let Vector(ref ty) = **ty {
@@ -26,30 +67,16 @@ pub fn transform_lookup(expr: &mut Expr) -> WeldResult<Expr> {
                     let data_ident = constructors::ident_expr(data_sym.clone(), data.ty.clone())?;
                     
                     /* call UDF to compute the new index */
-                    let new_idx_expr = constructors::cudf_expr(LOOKUP_SYM.to_string(),
-                                                        vec![data_ident.clone()],
-                                                        Struct(vec![Scalar(ScalarKind::I64),
-                                                                    Scalar(ScalarKind::I64)])).unwrap();
-                    let idx_sym = sym_gen.new_symbol("idx");
-                    let idx_ident = constructors::ident_expr(idx_sym.clone(), new_idx_expr.ty.clone())?;
-                    
-                    let shard_expr = constructors::lookup_expr(data_ident.clone(),
-                                                        constructors::getfield_expr(idx_ident.clone(), 0)?)?;
-                    let elt_expr = constructors::lookup_expr(shard_expr,
-                                                      constructors::getfield_expr(idx_ident.clone(), 1)?)?;
-
-                    /* don't compute index twice */
-                    let idx_let = constructors::let_expr(idx_sym.clone(), new_idx_expr, elt_expr)?;
-                    let data_let = constructors::let_expr(data_sym.clone(), (**data).clone(), idx_let)?;
-                    return Ok(data_let)
+                    let new_idx_expr = constructors::cudf_expr(SLICE_SYM.to_string(),
+                                                               vec![data_ident.clone()],
+                                                               Struct(vec![Scalar(ScalarKind::I64),
+                                                                           Scalar(ScalarKind::I64)])).unwrap();
+         
                 }
             }
         }
     }
-
-    // else invalid or not sharded -- do nothing
-    return Ok(expr.clone())
-}
+}*/
 
 /// Wrap a vec[vec[T]] in a loop that flattens it into a vec[T].
 /// Used when materializing a top-level Result.
@@ -59,7 +86,7 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
     if let Res { ref builder } = expr.kind {
         /* this Res will be a sharded vector when it is materialized */
         print!("type: {}\n", &expr.ty);
-        if (&expr).annotations.get_bool(SHARDED_ANNOTATION) {
+        if get_sharded(&expr) {
             if let Vector(ref ty) = expr.ty {
                 if let Vector(ref ty) = (**ty) {
                     // iterate over shards
@@ -120,7 +147,9 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
 }
 
 pub fn flatten_toplevel_func(expr: &mut Expr) -> WeldResult<Expr> {
-    print!("in flatten: {}\n", expr.pretty_print());
+    let mut print_conf = PrettyPrintConfig::new();
+    print_conf.show_types = true;
+    //print!("in flatten: {}\n", expr.pretty_print_config(&print_conf));
     if let Lambda { ref mut params, ref mut body } = expr.kind {
         if let Res { ref builder } = body.kind {
             let new_res = flatten_vec(&mut (**body).clone())?;

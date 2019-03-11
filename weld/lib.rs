@@ -704,7 +704,9 @@ impl WeldModule {
         debug!("Optimized SIR program:\n{}\n", &sir_prog);
         stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
 
-        nonfatal!(write_code(expr.pretty_print(), DumpCodeFormat::WeldOpt, &conf.dump_code));
+        let mut print_conf = PrettyPrintConfig::new();
+        print_conf.show_types = true;
+        nonfatal!(write_code(expr.pretty_print_config(&print_conf), DumpCodeFormat::WeldOpt, &conf.dump_code));
         nonfatal!(write_code(sir_prog.to_string(), DumpCodeFormat::SIR, &conf.dump_code));
 
         // Generate code.

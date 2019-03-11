@@ -75,7 +75,7 @@ pub fn gen_args_loop(iters: &Vec<vec_info>,
                                                          &constructors::ident_from_param(args_idx.clone()).unwrap(),
                                                          &constructors::ident_from_param(args_elt.clone()).unwrap(), &non_iter_args).unwrap();
     let args_appender =  constructors::newbuilder_expr(BuilderKind::Appender(Box::new(args_pointer.ty.clone())),
-                                                None).unwrap();
+                                                       None).unwrap();
     let args_builder = code_util::gen_builder(&args_appender.ty, ctx);
     let args_merge = constructors::merge_expr(
         constructors::ident_from_param(args_builder.clone()).unwrap(),
