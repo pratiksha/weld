@@ -768,7 +768,7 @@ impl LlvmGenerator {
                                 builder: LLVMBuilderRef,
                                 run: LLVMValueRef,
                                 ptr: LLVMValueRef) -> WeldResult<()> {
-        let _ = self.intrinsics.call_weld_run_print(builder, run, ptr);
+        let _ = self.intrinsics.call_weld_run_print_ptr(builder, run, ptr);
         Ok(())
     }
 
@@ -1284,6 +1284,8 @@ impl LlvmGenerator {
                 }
             }
             Sort { ref child, ref cmpfunc } => { // cmpfunc is an SirFunction
+                self.gen_print(context.builder, context.get_run(), CString::new("Entering sort").unwrap())?;
+                
                 let output_pointer = context.get_value(output)?;
                 let output_type = context.sir_function.symbol_type(
                     statement.output.as_ref().unwrap())?;
@@ -1328,6 +1330,7 @@ impl LlvmGenerator {
                     self.intrinsics.call(context.builder, "qsort_r", &mut args)?;
 
                     LLVMBuildStore(context.builder, child_value, output_pointer);
+                    self.gen_print(context.builder, context.get_run(), CString::new("Exiting sort").unwrap())?;
                     
                     Ok(())
                 } else {

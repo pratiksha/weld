@@ -80,7 +80,7 @@ impl Annotations {
     /// The previous value for this key is returned if there was one. 
     pub fn set_bool<K: Into<String>>(&mut self, key: K, value: bool) -> Option<bool> {
         let prev = match value {
-            true => self.set(key, "true"),
+            true  => self.set(key, "true"),
             false => self.set(key, "false")
         };
         

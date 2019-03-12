@@ -88,7 +88,7 @@ pub fn gen_distributed_loop(e: &mut Expr,
         let mut subprog_idents = vec![];
         
         let mut len_opt: Option<Expr> = None;
-        for it in iters.iter() {
+        for (i, it) in iters.iter().enumerate() {
             for it in iters.iter() {
                 if it.kind != ScalarIter {
                     return compile_err!("Got non-ScalarIter in distribute");
@@ -102,13 +102,13 @@ pub fn gen_distributed_loop(e: &mut Expr,
                     // already sharded. it type is a vec[vec[T]]
                     if let Vector(ref ty) = (*it).data.ty {
                         let (subprog_sym, subprog_ident) =
-                            code_util::new_sym_and_ident("new_iter", &(*it).data.ty.clone(), &e);
+                            code_util::new_sym_and_ident(format!("new_iter__{}", i).as_ref(), &(*it).data.ty.clone(), &e);
                         iter_data.push(vec_info { ident: subprog_ident.clone(),
                                                   original_ident: *(*it).data.clone(),
                                                   is_sharded: true
                         });
 
-                        iter_params.push(Parameter {name: subprog_sym, ty: (**ty).clone()});
+                        iter_params.push(Parameter { name: subprog_sym, ty: (**ty).clone() });
                         subprog_idents.push(subprog_ident.clone());
                     }
                 } else {
@@ -265,7 +265,6 @@ pub fn contains_distribute(expr: &Expr) -> bool {
         ret |= match e.annotations.get_bool(DISTRIBUTE_ANNOTATION) {
             None => false,
             Some(value) => value
-        }
     });
 
     ret
@@ -298,9 +297,11 @@ pub fn lookup_transform(expr: &mut Expr, ident_states: &mut FnvHashMap<Symbol, I
             if let Lookup { ref data, ref index } = e.kind {
                 if let Ident(ref sym) = data.kind {
                     let sharded = ident_states.get(&sym);
+                    println!("Checking {}", sym.name());
                     match sharded {
-                        None => { return (None, true) },
+                        None => {},
                         Some(x) => {
+                            println!("Sharded state for {}: {:?}", sym.name(), x);
                             if *x == IdentState::Sharded {
                                 let dist_lookup = gen_distributed_lookup(&e).unwrap();
                                 //println!("Returning from lookup: {}\n", &dist_lookup.pretty_print());
@@ -314,8 +315,17 @@ pub fn lookup_transform(expr: &mut Expr, ident_states: &mut FnvHashMap<Symbol, I
                     return (Some(dist_lookup), false); // TODO
                 }
             }
-        }
+        } 
 
+        if let Lookup { ref data, ref index } = e.kind {
+            // if there was a Distribute annotation, safe to remove it now
+            let mut replace = e.clone();
+            if !(replace.annotations.get(DISTRIBUTE_ANNOTATION).is_none()) {
+                replace.annotations.remove(DISTRIBUTE_ANNOTATION);
+            }
+            return (Some(replace), false);
+        }
+        
         return (None, true);
     });
 }
@@ -589,17 +599,14 @@ pub fn distribute(expr: &mut Expr, nworkers_conf: &i32) -> WeldResult<()> {
         return propagate_annotations(e, &mut ident_states);
     });
     
-    /* Start by distributing loops only over Idents that are not themselves
-       the product of distributed loops, because those might become sharded vectors.
-       After each pass, we can add any Idents whose type (vec[T] or vec[vec[T]] or otherwise) we now know,
-       and distribute any loops involving those inputs in the next pass.
-    Iterate until no top-level distribute loops remain. */
+    /* Distribute one `distribute`-annotated loop at a time.
+     * Iterate until no top-level `distribute` loops remain. */
     let mut i = 0;
     while contains_distribute(&expr) {
         /* Distribute as many loops as we can. */
         let mut print_conf = PrettyPrintConfig::new();
         print_conf.show_types = true;
-        //println!("distributing... iter {} {}", i, expr.pretty_print_config(&print_conf));
+        //println!("distributing... iter {}", i);//, expr.pretty_print_config(&print_conf));
 
         distribute_transform(expr, &mut ident_states, nworkers_conf);
         lookup_transform(expr, &mut ident_states);
