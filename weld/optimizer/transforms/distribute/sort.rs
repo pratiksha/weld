@@ -1,4 +1,4 @@
-//! Utility functions to sort a list of {k, v} pairs on keys, then strip thekeys.
+//! Utility functions to sort a list of {k, v} pairs on keys, then strip the keys.
 
 use ast::*;
 use ast::ExprKind::*;

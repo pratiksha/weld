@@ -5,6 +5,7 @@ use runtime::Ptr;
 #[link(name="smalloc")]
 extern "C" {
     pub fn smalloc(nbytes: u64) -> Ptr;
+    pub fn smalloc_aligned(nbytes: u64) -> Ptr;
     pub fn srealloc(pointer: Ptr, nbytes: u64) -> Ptr;
     pub fn sfree(pointer: Ptr) -> i32;
 }

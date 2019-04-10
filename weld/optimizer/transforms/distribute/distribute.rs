@@ -161,30 +161,35 @@ pub fn gen_distributed_loop(e: &mut Expr,
         // so we generate a loop over the shards that slices the input iters
         // and also adds the (remaining) input args in a struct
         // and then passes the whole thing to a dispatch call,
-        // before calling dispatch and stitching the result back using a merge.
+        // then stitches the result back using a merge.
         print!("generating shards\n");
         let (args_res, input_params) = dispatch::gen_args_loop(&iter_data,
                                                                len_expr,
                                                                &param_idents,
                                                                nworkers_conf,
                                                                e).unwrap();
-        let args_iter = code_util::simple_iter(args_res);
         let subprog = constructors::lambda_expr(input_params,
-                                         subprog_body.clone()).unwrap();
+                                                subprog_body.clone()).unwrap();
 
+        print!("generating dispatch loop\n");
         /* Create a loop to dispatch to all workers. 
          * Result of the dispatch loop is a vec of structs of {worker ID, pointer to result data}. */
-        let dispatch_loop = dispatch::gen_dispatch_loop(args_iter, &subprog, &subprog_body.ty, e).unwrap();
+        // let dispatch_loop = dispatch::gen_dispatch_loop(args_iter, &subprog, &subprog_body.ty, e).unwrap();
+        let dispatch_loop = dispatch::gen_dispatch_all(&subprog, &subprog_body.ty, args_res, e).unwrap();
 
-        print!("generating sort\n");
-        /* Sort result pointers by worker ID so there is a canonical ordering. */
-        let sorted_results = constructors::result_expr(gen_sorted_values_by_key(
-            &constructors::result_expr(dispatch_loop).unwrap(), e)?)?;
-        print!("sorted type: {}\n", &sorted_results.ty);
+        // print!("generating sort\n");
+        // /* Sort result pointers by worker ID so there is a canonical ordering. */
+        // let sorted_results = constructors::result_expr(gen_sorted_values_by_key(
+        //     &constructors::result_expr(dispatch_loop).unwrap(), e)?)?;
+        // print!("sorted type: {}\n", &sorted_results.ty);
+
+        print!("dispatch loop result\n");
+        // let results = constructors::result_expr(dispatch_loop)?;
+        let results = dispatch_loop;
         
         print!("generating loop\n");
         /* Finally, merge result of dispatch. */
-        let result_iter = code_util::simple_iter(sorted_results);
+        let result_iter = code_util::simple_iter(results);
 
         let merge_loop: Expr = if let Builder(ref bk, _) = builder.ty {
             match bk {
@@ -309,7 +314,7 @@ pub fn lookup_transform(expr: &mut Expr, ident_states: &mut FnvHashMap<Symbol, I
                             }
                         }
                     }
-                } else if data.annotations.get_bool(SHARDED_ANNOTATION).unwrap() {
+                } else if get_sharded(&data) {
                     let dist_lookup = gen_distributed_lookup(&e).unwrap();
                     //println!("Returning from lookup: {}\n", &dist_lookup.pretty_print());
                     return (Some(dist_lookup), false); // TODO

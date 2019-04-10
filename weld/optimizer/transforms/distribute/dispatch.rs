@@ -10,7 +10,7 @@ use optimizer::transforms::distribute::code_util;
 use optimizer::transforms::distribute::distribute::vec_info;
 use optimizer::transforms::distribute::shard;
 
-const DISPATCH_SYM: &str = "dispatch";
+const DISPATCH_SYM: &str = "dispatch_all";
 
 /// non_iter_args and iters should not have any names in common.
 /// Mutates shard_idents and params.
@@ -111,10 +111,11 @@ pub fn gen_dispatch(program_body: &Expr,
                                          vec![code,
                                               index_expr.clone(), /* param referencing iteration idx, aka worker ID */
                                               args_expr.clone()], /* param referencing arg */
-                                         Vector(Box::new(return_type.clone()))).unwrap();
+                                                        Vector(Box::new(return_type.clone()
+                                                    ))).unwrap();
     dispatch_expr = constructors::lookup_expr(dispatch_expr, constructors::zero_i64_literal()?)?;
     let dispatch_with_id = constructors::makestruct_expr(vec![index_expr.clone(), dispatch_expr])?;
-    
+
     Ok(dispatch_with_id)
 }
 
@@ -122,17 +123,17 @@ pub fn gen_dispatch(program_body: &Expr,
 /// Worker i will receive the ith set of args.
 pub fn gen_dispatch_loop(args_iter: Iter, subprog: &Expr, return_type: &Type, ctx: &Expr) -> WeldResult<Expr> {
     /* generated dispatch call appends worker ID to the result, so it returns a struct of {worker ID, pointer to result data}. */
-    let res_struct_ty = Struct(vec![Scalar(ScalarKind::I64),
-                                    return_type.clone()]);
+    //let res_struct_ty = Struct(vec![Scalar(ScalarKind::I64),
+    //                                return_type.clone()]);
 
     let args_ty = if let Vector(ref ty) = args_iter.data.ty {
         (**ty).clone()
     } else {
         return compile_err!("gen_dispatch_loop: args are not a Vector");
     };
-    
+     
     let result_builder = constructors::newbuilder_expr(
-        BuilderKind::Appender(Box::new(res_struct_ty.clone())), None)?;
+        BuilderKind::Appender(Box::new(return_type.clone())), None)?;
     let result_params = code_util::new_loop_params(&result_builder.ty, &args_ty, ctx);
 
     let builder = result_params[0].clone();
@@ -144,11 +145,46 @@ pub fn gen_dispatch_loop(args_iter: Iter, subprog: &Expr, return_type: &Type, ct
                             constructors::ident_from_param(idx).unwrap(),
                             constructors::ident_from_param(elem).unwrap()).unwrap();
     let merge = constructors::merge_expr(constructors::ident_from_param(builder).unwrap(),
-                                  func).unwrap();
+                                         func).unwrap();
     let lambda = constructors::lambda_expr(result_params, merge).unwrap();
 
     let dispatch_loop = constructors::for_expr(vec![args_iter], result_builder,
                                         lambda, false).unwrap();
 
     Ok(dispatch_loop)
+}
+
+/// Generate the UDF to call the dispatch function, which takes a vector of arguments as input.
+pub fn gen_dispatch_all(program_body: &Expr,
+                        return_type: &Type,
+                        args_expr: Expr,
+                        ctx: &Expr) -> WeldResult<Expr> {
+    let mut print_conf = PrettyPrintConfig::new();
+    print_conf.show_types = true;
+    print_conf.should_indent = false;
+    let code = constructors::literal_expr(LiteralKind::StringLiteral(program_body.pretty_print_config(&print_conf)))?;
+    let (args_sym, args_ident) = code_util::new_sym_and_ident("input_args", &args_expr.ty, ctx); // don't put the whole loop in the cudf arg
+    let mut dispatch_expr = constructors::cudf_expr(DISPATCH_SYM.to_string(),
+                                                    vec![code,
+                                                         args_ident.clone()], /* param referencing list of args */
+                                                    Vector(Box::new(
+                                                        Vector(Box::new(return_type.clone()
+                                                        ))
+                                                    ))).unwrap();
+
+    let unwrap_builder = constructors::newbuilder_expr(BuilderKind::Appender(Box::new(return_type.clone())), None)?;
+    let unwrap_params = code_util::new_loop_params(&unwrap_builder.ty, &Vector(Box::new(return_type.clone())), &dispatch_expr);
+    let builder_ident = constructors::ident_from_param(unwrap_params[0].clone())?;
+    let element_ident = constructors::ident_from_param(unwrap_params[2].clone())?;
+    let unwrap_lookup = constructors::lookup_expr(element_ident,
+                                                  constructors::zero_i64_literal()?)?;
+    let unwrap_lambda = constructors::lambda_expr(unwrap_params, constructors::merge_expr(builder_ident, unwrap_lookup)?)?;
+    let unwrap_iter = Iter { data: Box::new(dispatch_expr),
+                             start: None, end: None, stride: None,
+                             kind: IterKind::ScalarIter, strides:None, shape: None };
+    let mut unwrap_loop = constructors::for_expr(vec![unwrap_iter], unwrap_builder, unwrap_lambda, false)?; // Dereference the results.
+    unwrap_loop = constructors::result_expr(unwrap_loop)?;
+    unwrap_loop = constructors::let_expr(args_sym, args_expr, unwrap_loop)?;
+    
+    Ok(unwrap_loop)
 }

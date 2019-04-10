@@ -119,7 +119,7 @@ impl WeldRuntimeContext {
         }
         let layout = Layout::from_size_align_unchecked(size as usize, DEFAULT_ALIGN);
         //let mem = Allocator.alloc(layout.clone());
-        let mem = rsmalloc::smalloc(size as u64);
+        let mem = rsmalloc::smalloc_aligned(size as u64);
 
         self.allocated += layout.size();
         trace!("Alloc'd pointer {:?} ({} bytes)", mem, layout.size());
