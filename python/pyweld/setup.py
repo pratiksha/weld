@@ -18,7 +18,7 @@ elif system == 'Darwin':
 else:
     raise OSError("Unsupported platform {}", system)
 
-libweld_dir = os.environ["WELD_HOME"] + "/target/release/"
+libweld_dir = os.environ["WELD_HOME"] + "/target/debug/"
 libweld = libweld_dir + libweld
 module1 = Extension('weld', sources=[], libraries=['weld'], library_dirs=[libweld_dir])
 

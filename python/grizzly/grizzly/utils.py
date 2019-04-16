@@ -1,10 +1,10 @@
-import grizzly_impl
+from . import grizzly_impl
 
-from lazy_op import LazyOpResult, to_weld_type
+from .lazy_op import LazyOpResult, to_weld_type
 from weld.weldobject import *
 
-from seriesweld import *
-from dataframeweld import *
+from .seriesweld import *
+from .dataframeweld import *
 
 def merge(df1, df2):
     if isinstance(df1, DataFrameWeld):

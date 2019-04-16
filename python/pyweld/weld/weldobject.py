@@ -201,6 +201,8 @@ class WeldObject(object):
             if passes != "":
                 conf.set("weld.optimization.passes", passes)
 
+        conf.set("weld.distribute", "true")
+        conf.set("weld.distribute.nWorkers", "1")
         module = cweld.WeldModule(function, conf, err)
         if err.code() != 0:
             raise ValueError("Could not compile function {}: {}".format(

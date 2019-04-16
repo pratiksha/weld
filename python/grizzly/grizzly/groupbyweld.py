@@ -1,13 +1,13 @@
 import numpy as np
 import pandas as pd
 
-import grizzly_impl
-from lazy_op import LazyOpResult, to_weld_type
+from . import grizzly_impl
+from .lazy_op import LazyOpResult, to_weld_type
 from weld.weldobject import *
-import utils
+from . import utils
 
-import dataframeweld
-from seriesweld import SeriesWeld
+from . import dataframeweld
+from .seriesweld import SeriesWeld
 
 class GroupByWeld:
     """Summary

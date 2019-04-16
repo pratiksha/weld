@@ -87,8 +87,8 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
         /* this Res will be a sharded vector when it is materialized */
         print!("type: {}\n", &expr.ty);
         if get_sharded(&expr) {
-            if let Vector(ref ty) = expr.ty {
-                if let Vector(ref ty) = (**ty) {
+            if let Vector(ref shard_ty) = expr.ty {
+                if let Vector(ref ty) = (**shard_ty) {
                     // iterate over shards
                     let outer_appender = constructors::newbuilder_expr(BuilderKind::Appender((*ty).clone()), None)?;
                     let outer_params = vec![Parameter { name: sym_gen.new_symbol("b2"),
@@ -100,7 +100,7 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
                                             },
                                             Parameter {
                                                 name: sym_gen.new_symbol("e2"),
-                                                ty: (**ty).clone()
+                                                ty: (**shard_ty).clone()
                                             }];
                     
                     
@@ -118,7 +118,7 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
                                           }];
                     
 
-                    let shard_ident = constructors::ident_from_param(outer_params[1].clone())?;
+                    let shard_ident = constructors::ident_from_param(outer_params[2].clone())?;
                     let element_iter = Iter { data: Box::new(shard_ident.clone()),
                                               start: None, end: None, stride: None,
                                               kind: IterKind::ScalarIter,
@@ -127,15 +127,17 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
                     let inner_merge = constructors::merge_expr(constructors::ident_from_param(inner_params[0].clone()).unwrap(),
                                                         constructors::ident_from_param(inner_params[2].clone()).unwrap())?;
                     let inner_lambda = constructors::lambda_expr(inner_params, inner_merge)?;
+                    println!("for 1");
                     let inner_for = constructors::for_expr(vec![element_iter],
-                                                    constructors::ident_from_param(outer_params[0].clone()).unwrap(),
-                                                    inner_lambda, true)?;
+                                                           constructors::ident_from_param(outer_params[0].clone()).unwrap(),
+                                                           inner_lambda, true)?;
                     let outer_lambda = constructors::lambda_expr(outer_params, inner_for)?;
 
                     let shard_iter = Iter { data: Box::new(expr.clone()),
                                             start: None, end: None, stride: None,
                                             kind: IterKind::ScalarIter,
                                             strides: None, shape: None };
+                    println!("for 2");
                     let outer_for = constructors::for_expr(vec![shard_iter], outer_appender.clone(), outer_lambda, false)?;
                     return Ok(outer_for)
                 }

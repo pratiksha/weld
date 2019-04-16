@@ -270,6 +270,7 @@ pub fn contains_distribute(expr: &Expr) -> bool {
         ret |= match e.annotations.get_bool(DISTRIBUTE_ANNOTATION) {
             None => false,
             Some(value) => value
+        }
     });
 
     ret
@@ -623,9 +624,10 @@ pub fn distribute(expr: &mut Expr, nworkers_conf: &i32) -> WeldResult<()> {
         i += 1;
     }
 
-    println!("done, flatten....");
+    println!("done, flatten.... expr {}", expr.pretty_print());
     /* Finally, flatten the topmost result that will be returned to the calling program. */
     expr.transform_once(&mut |ref mut e| Some(flatten_toplevel_func(e).unwrap()));
+    println!("flattened expr: {}", expr.pretty_print());
 
     force_ident_types(expr, &mut ident_states);
     
