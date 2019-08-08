@@ -22,15 +22,15 @@ fn partition_to_slice(vec_ident: &Expr,
                       constructors::getfield_expr(partition_ident.clone(), 1)?  /* slice size */)
 }
 
-/// Call a CUDF to split total_len into nworkers_conf shards.
-pub fn gen_partition_call(total_len: &Expr, nworkers_conf: &i32) -> WeldResult<Expr> {
-    let nworkers = constructors::literal_expr(LiteralKind::I32Literal(nworkers_conf.clone())).unwrap();
+/// Call a CUDF to split total_len into partitions_conf shards.
+pub fn gen_partition_call(total_len: &Expr, partitions_conf: &i32) -> WeldResult<Expr> {
+    let partitions = constructors::literal_expr(LiteralKind::I32Literal(partitions_conf.clone())).unwrap();
     let increment = constructors::one_i64_literal().unwrap();
     let partition_type = Struct(vec![Scalar(ScalarKind::I64),
                                      Scalar(ScalarKind::I64)]);    
     let partition_expr = constructors::cudf_expr(PARTITION_SYM.to_string(),
                                       vec![total_len.clone(),
-                                           nworkers,
+                                           partitions,
                                            increment],
                                           Vector(Box::new(partition_type)))?;
 

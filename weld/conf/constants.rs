@@ -122,8 +122,8 @@ pub const CONF_ENABLE_BOUNDS_CHECKS_KEY: &'static str = "weld.compile.enableBoun
 /// Enables automatic sharding and distributed code in Clamor.
 pub const CONF_DISTRIBUTE_KEY: &'static str = "weld.distribute";
 
-/// Number of workers in Clamor.
-pub const CONF_NWORKERS_KEY: &'static str = "weld.distribute.nWorkers";
+/// Number of partitions for a distributed task in Clamor.
+pub const CONF_PARTITIONS_KEY: &'static str = "weld.distribute.partitions";
 
 /// Default memory limit.
 pub const CONF_MEMORY_LIMIT_DEFAULT: i64 = 1000000000;
@@ -170,8 +170,8 @@ pub const CONF_DUMP_CODE_DIR_DEFAULT: &'static str = ".";
 /// Automatic sharding off by default.
 pub const CONF_DISTRIBUTE_DEFAULT: bool = false;
 
-/// Default number of workers in Clamor.
-pub const CONF_NWORKERS_DEFAULT: i32 = 1;
+/// Default number of partitions for a distributed task in Clamor.
+pub const CONF_PARTITIONS_DEFAULT: i32 = 1;
 
 /// Default set of optimization passes.
 pub const CONF_OPTIMIZATION_PASSES_DEFAULT: &[&'static str] =  &[

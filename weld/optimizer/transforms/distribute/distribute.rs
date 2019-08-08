@@ -76,7 +76,7 @@ fn get_parameters(e: &Expr) -> HashSet<Parameter> {
 /// Keep track of variables that aren't sharded, and pass to workers.
 pub fn gen_distributed_loop(e: &mut Expr,
                             ident_states: &mut FnvHashMap<Symbol, IdentState>,
-                            nworkers_conf: &i32) -> WeldResult<Option<Expr>> {
+                            partitions_conf: &i32) -> WeldResult<Option<Expr>> {
     let mut print_conf = PrettyPrintConfig::new();
     print_conf.show_types = true;
     //print!("in distribute: {}\n", e.pretty_print_config(&print_conf));
@@ -166,7 +166,7 @@ pub fn gen_distributed_loop(e: &mut Expr,
         let (args_res, input_params) = dispatch::gen_args_loop(&iter_data,
                                                                len_expr,
                                                                &param_idents,
-                                                               nworkers_conf,
+                                                               partitions_conf,
                                                                e).unwrap();
         let subprog = constructors::lambda_expr(input_params,
                                                 subprog_body.clone()).unwrap();
@@ -340,14 +340,14 @@ pub fn lookup_transform(expr: &mut Expr, ident_states: &mut FnvHashMap<Symbol, I
 /// ident_states tracks any Idents that correspond to a sharded vector.
 pub fn distribute_transform(expr: &mut Expr,
                             ident_states: &mut FnvHashMap<Symbol, IdentState>,
-                            nworkers_conf: &i32) {
+                            partitions_conf: &i32) {
     expr.transform_or_continue(&mut |ref mut e| {
         if should_distribute(&e) {
             if let For { ref iters, ref builder, ref func } = e.kind {
                 /* Check that iters are all Idents. If not, wrap in an Ident before distributing. */
                 let (mut ident_loop, new_symbols) = iters_to_idents(e).unwrap();
                 let mut dist_loop = gen_distributed_loop(&mut ident_loop, ident_states,
-                                                         nworkers_conf).unwrap().unwrap();
+                                                         partitions_conf).unwrap().unwrap();
                 for (sym, value) in new_symbols.iter() {
                     dist_loop = constructors::let_expr((*sym).clone(),
                                                        (*value).clone(), dist_loop).unwrap();
@@ -565,7 +565,7 @@ fn propagate_annotations(e: &mut Expr, ident_states: &mut FnvHashMap<Symbol, Ide
 /// Convert top-level For loops in this expr into distributed For loops.
 /// Transform any vector operations on a distributed vector appropriately to be compatible with the new distributed input.
 /// TODO iters_to_idents.
-pub fn distribute(expr: &mut Expr, nworkers_conf: &i32) -> WeldResult<()> {
+pub fn distribute(expr: &mut Expr, partitions_conf: &i32) -> WeldResult<()> {
     /* First annotate all top-level For loops to be distributed. */
     expr.transform_and_continue(&mut |ref mut e| {
         if let For { ref iters, ref builder, ref func } = e.kind {
@@ -614,7 +614,7 @@ pub fn distribute(expr: &mut Expr, nworkers_conf: &i32) -> WeldResult<()> {
         print_conf.show_types = true;
         //println!("distributing... iter {}", i);//, expr.pretty_print_config(&print_conf));
 
-        distribute_transform(expr, &mut ident_states, nworkers_conf);
+        distribute_transform(expr, &mut ident_states, partitions_conf);
         lookup_transform(expr, &mut ident_states);
 
         expr.transform_up_res(&mut |ref mut e| {

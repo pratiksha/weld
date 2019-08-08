@@ -675,7 +675,7 @@ impl WeldModule {
                                 conf.enable_experimental_passes)?;
 
         if conf.distribute {
-            optimizer::transforms::distribute::distribute::distribute(&mut expr, &conf.nworkers);
+            optimizer::transforms::distribute::distribute::distribute(&mut expr, &conf.partitions);
         }
     
         // Uniquify again.

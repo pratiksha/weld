@@ -104,7 +104,7 @@ pub struct ParsedConf {
     /// Enables bounds checking in generated code.
     pub enable_bounds_checks: bool,
     pub distribute: bool,
-    pub nworkers: i32,
+    pub partitions: i32,
     /// LLVM options.
     pub llvm: LLVMConfig,
     /// Options for writing code to a file.
@@ -122,7 +122,7 @@ impl Default for ParsedConf {
             optimization_passes: CONF_OPTIMIZATION_PASSES.clone(),
             enable_bounds_checks: CONF_ENABLE_BOUNDS_CHECKS_DEFAULT,
             distribute: CONF_DISTRIBUTE_DEFAULT,
-            nworkers: CONF_NWORKERS_DEFAULT,
+            partitions: CONF_PARTITIONS_DEFAULT,
             llvm: LLVMConfig::default(),
             dump_code: DumpCodeConfig::default(),
         }
@@ -180,8 +180,8 @@ impl ParsedConf {
                                                  CONF_ENABLE_BOUNDS_CHECKS_DEFAULT)?,
             distribute: conf.parse_str(CONF_DISTRIBUTE_KEY,
                                        CONF_DISTRIBUTE_DEFAULT)?,
-            nworkers: conf.parse_str(CONF_NWORKERS_KEY,
-                                     CONF_NWORKERS_DEFAULT)?,
+            partitions: conf.parse_str(CONF_PARTITIONS_KEY,
+                                       CONF_PARTITIONS_DEFAULT)?,
             llvm: LLVMConfig {
                 opt_level: conf.parse_str(CONF_LLVM_OPTIMIZATION_LEVEL_KEY,
                                           CONF_LLVM_OPTIMIZATION_LEVEL_DEFAULT)?,

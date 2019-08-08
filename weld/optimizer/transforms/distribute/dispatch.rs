@@ -55,10 +55,10 @@ pub fn build_args_struct(iters: &Vec<vec_info>,
 pub fn gen_args_loop(iters: &Vec<vec_info>,
                      total_len: &Expr,
                      non_iter_args: &Vec<Expr>,
-                     nworkers_conf: &i32,
+                     partitions_conf: &i32,
                      ctx: &Expr) -> WeldResult<(Expr, Vec<Parameter>)> {
     /* Generate the UDF call to create partitions. */
-    let partition_udf = shard::gen_partition_call(total_len, nworkers_conf).unwrap();
+    let partition_udf = shard::gen_partition_call(total_len, partitions_conf).unwrap();
     let (partition_name, partition_ident) = code_util::new_sym_and_ident("part", &partition_udf.ty, ctx);
 
     let partitions_iter = code_util::simple_iter(partition_ident.clone());
@@ -93,7 +93,7 @@ pub fn gen_args_loop(iters: &Vec<vec_info>,
         return compile_err!("gen_create_dispatch_args: partitions not an Ident\n");
     };
     
-    let args_res = constructors::result_expr(partition_let).unwrap(); /* materialize the entire list of nworkers args */
+    let args_res = constructors::result_expr(partition_let).unwrap(); /* materialize the entire list of partitions args */
 
     Ok((args_res, input_params))
 }
