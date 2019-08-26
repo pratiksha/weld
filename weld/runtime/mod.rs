@@ -111,13 +111,13 @@ impl WeldRuntimeContext {
         assert!(size >= 0);
         let size = size as usize;
 
-        if self.allocated + size > self.memlimit {
+/*        if self.allocated + size > self.memlimit {
             self.errno = WeldRuntimeErrno::OutOfMemory;
             panic!("Weld run ran out of memory (limit={}, attempted to allocate {}",
                    self.memlimit,
                    self.allocated + size);
         }
-        let layout = Layout::from_size_align_unchecked(size as usize, DEFAULT_ALIGN);
+*/        let layout = Layout::from_size_align_unchecked(size as usize, DEFAULT_ALIGN);
         //let mem = Allocator.alloc(layout.clone());
         let mem = rsmalloc::smalloc(size as u64);
 
@@ -137,13 +137,13 @@ impl WeldRuntimeContext {
         assert!(size >= 0);
         let size = size as usize;
         let old_layout = self.allocations.remove(&pointer).unwrap();
-        if self.allocated - old_layout.size() + size > self.memlimit {
+/*        if self.allocated - old_layout.size() + size > self.memlimit {
             self.errno = WeldRuntimeErrno::OutOfMemory;
             panic!("Weld run ran out of memory (limit={}, attempted to allocate {}",
                    self.memlimit,
                    self.allocated - old_layout.size() + size);
         }
-
+*/
         // Must pass *old* layout to realloc!
         //let mem = Allocator.realloc(pointer, old_layout.clone(), size);
         let mem = rsmalloc::srealloc(pointer, size as u64);
