@@ -302,7 +302,7 @@ impl InferTypesInternal for Expr {
 
     /// Infer the types of an expression based on direct subexpressions.
     fn infer_locally(&mut self, env: &TypeMap) -> WeldResult<bool> {
-        println!("inferring: {}", self.pretty_print());
+        //println!("inferring: {}", self.pretty_print());
         match self.kind {
             Literal(I8Literal(_)) =>
                 self.ty.push_complete(Scalar(I8)),

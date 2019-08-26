@@ -82,7 +82,7 @@ pub fn gen_distributed_loop(e: &mut Expr,
     //print!("in distribute: {}\n", e.pretty_print_config(&print_conf));
 
     if let For { ref iters, ref builder, ref func } = e.kind {
-        print!("getting iters\n");
+        //print!("getting iters\n");
         let mut iter_data = vec![];
         let mut iter_params = vec![];
         let mut subprog_idents = vec![];
@@ -135,7 +135,7 @@ pub fn gen_distributed_loop(e: &mut Expr,
         };
         
         /* create Lambda for subprogram */
-        print!("generating subprog\n");
+        //print!("generating subprog\n");
         let mut subprog_iter_idents: Vec<Expr> = iter_data.iter().map(|ref x| x.ident.clone()).collect();
         let mut subprog_iters = subprog_idents.iter().map(|x| code_util::simple_iter(x.clone())).collect();
 
@@ -144,7 +144,7 @@ pub fn gen_distributed_loop(e: &mut Expr,
             constructors::for_expr(subprog_iters, (**builder).clone(), (**func).clone(), false)?)?;
 
         /* create args lists for dispatch */
-        print!("generating args\n");
+        //print!("generating args\n");
 
         /* Collect any remaining params that are not in the list of iters. */
         let params: Vec<Parameter> = get_parameters(&subprog_body).into_iter().collect();
@@ -162,7 +162,7 @@ pub fn gen_distributed_loop(e: &mut Expr,
         // and also adds the (remaining) input args in a struct
         // and then passes the whole thing to a dispatch call,
         // then stitches the result back using a merge.
-        print!("generating shards\n");
+        //print!("generating shards\n");
         let (args_res, input_params) = dispatch::gen_args_loop(&iter_data,
                                                                len_expr,
                                                                &param_idents,
@@ -171,7 +171,7 @@ pub fn gen_distributed_loop(e: &mut Expr,
         let subprog = constructors::lambda_expr(input_params,
                                                 subprog_body.clone()).unwrap();
 
-        print!("generating dispatch loop\n");
+        //print!("generating dispatch loop\n");
         /* Create a loop to dispatch to all workers. 
          * Result of the dispatch loop is a vec of structs of {worker ID, pointer to result data}. */
         // let dispatch_loop = dispatch::gen_dispatch_loop(args_iter, &subprog, &subprog_body.ty, e).unwrap();
@@ -183,22 +183,22 @@ pub fn gen_distributed_loop(e: &mut Expr,
         //     &constructors::result_expr(dispatch_loop).unwrap(), e)?)?;
         // print!("sorted type: {}\n", &sorted_results.ty);
 
-        print!("dispatch loop result\n");
+        //print!("dispatch loop result\n");
         // let results = constructors::result_expr(dispatch_loop)?;
         let results = dispatch_loop;
         
-        print!("generating loop\n");
+        //print!("generating loop\n");
         /* Finally, merge result of dispatch. */
         let result_iter = code_util::simple_iter(results);
 
         let merge_loop: Expr = if let Builder(ref bk, _) = builder.ty {
             match bk {
                 BuilderKind::Appender(..) => {
-                    print!("merge appender\n");
+                    //print!("merge appender\n");
                     gen_merge_appender(&result_iter, subprog_body.ty, builder).unwrap()
                 },
                 BuilderKind::Merger(..) => {
-                    print!("merge merger\n");
+                    //print!("merge merger\n");
                     gen_merge_merger(&result_iter, subprog_body.ty, builder).unwrap()
                 },
                 /* BuilderKind::DictMerger(..) => {
@@ -206,11 +206,11 @@ pub fn gen_distributed_loop(e: &mut Expr,
                     // TODO gen_merge_dicts(&result_iter, subprog_body.ty, builder).unwrap()
                 }, */
                 BuilderKind::VecMerger(..) => {
-                    print!("merge vecmerger\n");
+                    //print!("merge vecmerger\n");
                     gen_merge_vecmerger(&result_iter, subprog_body.ty, builder).unwrap()
                 },
                 _ => {
-                    print!("Not distributing: builder kind not supported\n");
+                   // print!("Not distributing: builder kind not supported\n");
                     return Ok(None);
                 }
             } 
