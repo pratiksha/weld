@@ -130,7 +130,7 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
                     println!("for 1");
                     let inner_for = constructors::for_expr(vec![element_iter],
                                                            constructors::ident_from_param(outer_params[0].clone()).unwrap(),
-                                                           inner_lambda, true)?;
+                                                           inner_lambda, false)?;
                     let outer_lambda = constructors::lambda_expr(outer_params, inner_for)?;
 
                     let shard_iter = Iter { data: Box::new(expr.clone()),
