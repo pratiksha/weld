@@ -709,7 +709,7 @@ impl<'t> Parser<'t> {
 
             TIdent(ref name) => {
                 Ok(expr_box(Ident(Symbol::new(name.as_str(), 0)),
-                            Annotations::new()))
+                            annotations))
             }
 
             TOpenParen => {
