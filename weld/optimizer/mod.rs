@@ -24,6 +24,9 @@ pub fn apply_passes(expr: &mut Expr,
                         passes: &Vec<Pass>,
                         stats: &mut CompilationStats,
                         use_experimental: bool) -> WeldResult<()> {
+    let mut print_conf = PrettyPrintConfig::new();
+    print_conf.show_types = true;
+
     for pass in passes {
         if pass.pass_name() == "vectorize" {
             continue;

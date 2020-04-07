@@ -567,6 +567,9 @@ fn propagate_annotations(e: &mut Expr, ident_states: &mut FnvHashMap<Symbol, Ide
 /// TODO iters_to_idents.
 pub fn distribute(expr: &mut Expr, partitions_conf: &i32) -> WeldResult<()> {
     /* First annotate all top-level For loops to be distributed. */
+    let mut print_conf = PrettyPrintConfig::new();
+    print_conf.show_types = true;
+    
     expr.transform_and_continue(&mut |ref mut e| {
         if let For { ref iters, ref builder, ref func } = e.kind {
             // Distribute annotation indicates that this loop should be transformed.
@@ -610,9 +613,7 @@ pub fn distribute(expr: &mut Expr, partitions_conf: &i32) -> WeldResult<()> {
     let mut i = 0;
     while contains_distribute(&expr) {
         /* Distribute as many loops as we can. */
-        let mut print_conf = PrettyPrintConfig::new();
-        print_conf.show_types = true;
-        //println!("distributing... iter {}", i);//, expr.pretty_print_config(&print_conf));
+        println!("distributing... iter {}", expr.pretty_print_config(&print_conf));
 
         distribute_transform(expr, &mut ident_states, partitions_conf);
         lookup_transform(expr, &mut ident_states);
