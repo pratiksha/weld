@@ -124,7 +124,8 @@ pub fn gen_merge_vecmerger(result_iter: &Iter, result_ty: Type,
     let inner_lambda = constructors::lambda_expr(inner_params, inner_merge)?;
     let inner_for = constructors::for_expr(vec![element_iter], 
                                            constructors::ident_from_param(outer_params[0].clone()).unwrap(), // outer vecmerger
-                                    inner_lambda, true)?; // merge into outer builder
+                                           //inner_lambda, true)?; // merge into outer builder
+                                           inner_lambda, false)?; // TODO vectorization
     let outer_lambda = constructors::lambda_expr(outer_params, inner_for)?;
     let outer_for = constructors::for_expr(vec![result_iter.clone()], builder.clone(), outer_lambda, false)?;
     Ok(outer_for)

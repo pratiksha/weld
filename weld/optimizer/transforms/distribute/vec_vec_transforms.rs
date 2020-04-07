@@ -130,7 +130,8 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
                     println!("for 1");
                     let inner_for = constructors::for_expr(vec![element_iter],
                                                            constructors::ident_from_param(outer_params[0].clone()).unwrap(),
-                                                           inner_lambda, true)?;
+                                                           //inner_lambda, true)?; // TODO vectorization
+                                                           inner_lambda, false)?;
                     let outer_lambda = constructors::lambda_expr(outer_params, inner_for)?;
 
                     let shard_iter = Iter { data: Box::new(expr.clone()),
@@ -143,7 +144,7 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
                 }
             }
         }
-    }
+     }
 
     return Ok(expr.clone())
 }
@@ -151,9 +152,11 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
 pub fn flatten_toplevel_func(expr: &mut Expr) -> WeldResult<Expr> {
     let mut print_conf = PrettyPrintConfig::new();
     print_conf.show_types = true;
-    //print!("in flatten: {}\n", expr.pretty_print_config(&print_conf));
+    print!("in flatten: {}\n", expr.pretty_print_config(&print_conf));
     if let Lambda { ref mut params, ref mut body } = expr.kind {
+        println!("got lambda");
         if let Res { ref builder } = body.kind {
+            println!("got res");
             let new_res = flatten_vec(&mut (**body).clone())?;
             return Ok(constructors::lambda_expr(params.clone(), new_res.clone())?);
         }

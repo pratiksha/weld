@@ -50,7 +50,8 @@ pub fn iters_to_idents(e: &Expr) -> WeldResult<(Expr, Vec<(Symbol, Expr)>)> {
         }
 
         /* TODO propagate vectorized */
-        let mut new_loop = constructors::for_expr(new_iters, (**builder).clone(), (**func).clone(), is_vectorizable)?;
+        //let mut new_loop = constructors::for_expr(new_iters, (**builder).clone(), (**func).clone(), is_vectorizable)?;
+        let mut new_loop = constructors::for_expr(new_iters, (**builder).clone(), (**func).clone(), false)?;
         apply_sharded(&e, &mut new_loop);
         Ok((new_loop, new_symbols))
     } else {
