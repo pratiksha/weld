@@ -201,10 +201,10 @@ pub fn gen_distributed_loop(e: &mut Expr,
                     //print!("merge merger\n");
                     gen_merge_merger(&result_iter, subprog_body.ty, builder).unwrap()
                 },
-                /* BuilderKind::DictMerger(..) => {
+                BuilderKind::DictMerger(..) => {
                     print!("merge dictionary\n");
-                    // TODO gen_merge_dicts(&result_iter, subprog_body.ty, builder).unwrap()
-                }, */
+                    gen_merge_dictmerger(&result_iter, subprog_body.ty, builder).unwrap()
+                }, 
                 BuilderKind::VecMerger(..) => {
                     //print!("merge vecmerger\n");
                     gen_merge_vecmerger(&result_iter, subprog_body.ty, builder).unwrap()

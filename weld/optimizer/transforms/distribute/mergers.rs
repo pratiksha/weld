@@ -57,40 +57,6 @@ pub fn gen_merge_merger(result_iter: &Iter, result_ty: Type,
     Ok(loop_expr)
 }
 
-/// Merge a vector of locally computed dictionaries.
-/// The builder should be the same as the non-distributed builder.
-/// The outer loop is over dictionaries and the inner loop is over (key, value) pairs within a dictionary.
-/// The (key, value) pairs are merged into the outermost builder.
-/// result_iter should be an iterator over the shards returned in the result.
-/// TODO: this is currently incorrect
-/* pub fn gen_merge_dicts(result_iter: &Iter, result_ty: Type,
-                       builder: &Expr) -> WeldResult<Expr> {
-    let inner_params = code_util::new_loop_params(&builder.ty, &result_ty, builder);
-    let outer_params = code_util::new_loop_params(&builder.ty, &Vector(Box::new(result_ty.clone())), builder);
-
-    // convert dictionary to a vector
-    // lookup_expr used to get dictionary from pointer
-    let dict_vec = constructors::tovec_expr(constructors::lookup_expr(
-        constructors::ident_from_param(outer_params[2].clone()).unwrap(),
-        constructors::zero_i64_literal().unwrap()).unwrap())?;
-
-    // iterator over elements within each dict
-    let element_iter = Iter { data: Box::new(dict_vec),
-                              start: None, end: None, stride: None,
-                              kind: IterKind::ScalarIter,
-                              strides: None, shape: None };
-
-    // merge using key, value
-    let inner_merge = code_util::simple_merge_expr(&inner_params[0], &inner_params[2]);
-    let inner_lambda = constructors::lambda_expr(inner_params, inner_merge)?;
-    let inner_for = constructors::for_expr(vec![element_iter], // dictionary converted to vector
-                                    constructors::ident_from_param(outer_params[0].clone()).unwrap(), // outer builder
-                                    inner_lambda, true)?; // merge into outer builder
-    let outer_lambda = constructors::lambda_expr(outer_params, inner_for)?;
-    let outer_for = constructors::for_expr(vec![result_iter.clone()], builder.clone(), outer_lambda, false)?;
-    Ok(outer_for)
-} */
-
 /// Merge a vector of locally computed vecmerger.
 /// The builder should be the same as the non-distributed builder.
 /// The outer loop is over vectors and the inner loop is over elements of the vector.
@@ -128,5 +94,47 @@ pub fn gen_merge_vecmerger(result_iter: &Iter, result_ty: Type,
                                            inner_lambda, false)?; // TODO vectorization
     let outer_lambda = constructors::lambda_expr(outer_params, inner_for)?;
     let outer_for = constructors::for_expr(vec![result_iter.clone()], builder.clone(), outer_lambda, false)?;
+    Ok(outer_for)
+}
+
+/// Merge a vector of locally computed dictmerger.
+/// The builder should be the same as the non-distributed builder.
+/// The outer loop is over dicts and the inner loop is over elements of the dict.
+/// The elements are merged into the outermost builder by index.
+/// result_iter should be an iterator over the shards returned in the result.
+pub fn gen_merge_dictmerger(result_iter: &Iter, result_ty: Type,
+                            builder: &Expr) -> WeldResult<Expr> {
+    let inner_ty = if let Dict(ref key_ty, ref val_ty) = result_ty {
+        Struct(vec![*key_ty.clone(), *val_ty.clone()])
+    } else {
+        return compile_err!("Found non-Vector in vecmerger");
+    };
+    
+    let inner_params = code_util::new_loop_params(&builder.ty, &inner_ty, builder); 
+    let outer_params = code_util::new_loop_params(&builder.ty, &result_ty.clone(), builder);
+
+    // iterator over elements in each dict
+    let element = constructors::ident_from_param(outer_params[2].clone())?;
+    let element_iter = Iter { data: Box::new(constructors::tovec_expr(element)?),
+                              start: None, end: None, stride: None,
+                              kind: IterKind::ScalarIter,
+                              strides: None, shape: None };
+
+    // merge using key, value
+    println!("got iter");
+    let merge_elt = constructors::ident_from_param(inner_params[2].clone())?;
+    println!("finished merge exprs");
+    let builder_ident = constructors::ident_from_param(inner_params[0].clone()).unwrap();
+    println!("starting inner merge");
+    let inner_merge = constructors::merge_expr(builder_ident, merge_elt)?;
+    let inner_lambda = constructors::lambda_expr(inner_params, inner_merge)?;
+    let inner_for = constructors::for_expr(vec![element_iter], 
+                                           constructors::ident_from_param(outer_params[0].clone()).unwrap(), // outer vecmerger
+                                           //inner_lambda, true)?; // merge into outer builder
+                                           inner_lambda, false)?; // TODO vectorization
+    println!("starting outer merge");
+    let outer_lambda = constructors::lambda_expr(outer_params, inner_for)?;
+    let outer_for = constructors::for_expr(vec![result_iter.clone()], builder.clone(), outer_lambda, false)?;
+    println!("done");
     Ok(outer_for)
 }

@@ -126,7 +126,7 @@ pub fn broadcast_expr(expr: Expr) -> WeldResult<Expr> {
 
 pub fn tovec_expr(expr: Expr) -> WeldResult<Expr> {
     let ty = if let Dict(ref kt, ref vt) = expr.ty {
-        Struct(vec![*kt.clone(), *vt.clone()])
+        Vector(Box::new(Struct(vec![*kt.clone(), *vt.clone()])))
     } else {
         return compile_err!("Internal error: Mismatched types in tovec_expr");
     };
@@ -525,15 +525,22 @@ pub fn merge_expr(builder: Expr, value: Expr) -> WeldResult<Expr> {
             }
             DictMerger(ref elem_ty1, ref elem_ty2, _) => {
                 if let Struct(ref v_ty) = value.ty {
-                    if v_ty.len() < 2 { return err; }
-
-                    if elem_ty1.as_ref() != &v_ty[0] {
+                    if v_ty.len() < 2 {
+                        println!("len mismatch");
                         return err;
                     }
+
+                    if elem_ty1.as_ref() != &v_ty[0] {
+                        println!("ty1 mismatch: {} {}", elem_ty1, v_ty[0]);
+                        return err;
+                    }
+
                     if elem_ty2.as_ref() != &v_ty[1] {
+                        println!("ty2 mismatch: {} {}", elem_ty2, v_ty[1]);
                         return err;
                     }
                 } else {
+                    println!("struct mismatch");
                     return err;
                 }
             }
