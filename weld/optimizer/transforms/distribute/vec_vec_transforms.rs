@@ -13,7 +13,7 @@ use optimizer::transforms::distribute::distribute;
 use optimizer::transforms::distribute::distribute::get_sharded;
 use optimizer::transforms::distribute::distribute::SHARDED_ANNOTATION;
 
-const LOOKUP_SYM: &str = "lookup";
+const LOOKUP_SYM: &str = "lookup_idx";
 const SLICE_SYM: &str = "slice";
 
 /// Transform a Lookup on a vec[T] into an equivalent Lookup on a vec[vec[T]].

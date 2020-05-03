@@ -66,7 +66,7 @@ fn get_parameters(e: &Expr) -> HashSet<Parameter> {
     for sym in final_syms.iter() {
         typed_syms.insert(Parameter { name: (*sym).clone(), ty: (*types.get(&sym).unwrap()).clone() });
     }
-
+ 
     typed_syms
 }
 
@@ -150,7 +150,14 @@ pub fn gen_distributed_loop(e: &mut Expr,
         let params: Vec<Parameter> = get_parameters(&subprog_body).into_iter().collect();
         let mut param_idents = vec![];
         for p in params.iter() {
-            let param_ident = constructors::ident_expr(p.name.clone(), p.ty.clone())?;
+            let is_sharded = ident_states.get(&p.name);
+            let ty = if is_sharded == Some(&IdentState::Sharded) {
+                Vector(Box::new(p.ty.clone()))
+            } else {
+                p.ty.clone()
+            };
+            
+            let param_ident = constructors::ident_expr(p.name.clone(), ty)?;
             if iter_params.contains(&p) | subprog_iter_idents.contains(&param_ident) {
                 continue;
             }
@@ -168,9 +175,11 @@ pub fn gen_distributed_loop(e: &mut Expr,
                                                                &param_idents,
                                                                partitions_conf,
                                                                e).unwrap();
-        let subprog = constructors::lambda_expr(input_params,
-                                                subprog_body.clone()).unwrap();
-
+        let mut subprog = constructors::lambda_expr(input_params,
+                                                    subprog_body.clone()).unwrap();
+        lookup_transform(&mut subprog, ident_states); // Transform any distributed lookups in the subexpression
+        force_ident_types(&mut subprog, ident_states);
+        
         //print!("generating dispatch loop\n");
         /* Create a loop to dispatch to all workers. 
          * Result of the dispatch loop is a vec of structs of {worker ID, pointer to result data}. */
