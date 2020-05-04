@@ -149,17 +149,27 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
     return Ok(expr.clone())
 }
 
+pub fn flatten_final_res(expr: &mut Expr) -> WeldResult<Expr> {
+    if let Res { ref builder } = expr.kind {
+        println!("got res");
+        let new_res = flatten_vec(&mut (expr).clone())?;
+        Ok(new_res)
+    } else if let Let { ref name, ref value, ref mut body } = expr.kind {
+        let new_body = flatten_final_res(body)?;
+        Ok(constructors::let_expr(name.clone(), (**value).clone(), new_body)?)
+    } else {
+        compile_err!("Invalid expr passed to flatten")
+    }
+}
+
 pub fn flatten_toplevel_func(expr: &mut Expr) -> WeldResult<Expr> {
     let mut print_conf = PrettyPrintConfig::new();
     print_conf.show_types = true;
     print!("in flatten: {}\n", expr.pretty_print_config(&print_conf));
     if let Lambda { ref mut params, ref mut body } = expr.kind {
-        println!("got lambda");
-        if let Res { ref builder } = body.kind {
-            println!("got res");
-            let new_res = flatten_vec(&mut (**body).clone())?;
-            return Ok(constructors::lambda_expr(params.clone(), new_res.clone())?);
-        }
+        println!("got lambda, body {}", body.pretty_print());
+        let new_res = flatten_final_res(body)?;
+        return Ok(constructors::lambda_expr(params.clone(), new_res.clone())?);
     }
 
     return Ok(expr.clone())
