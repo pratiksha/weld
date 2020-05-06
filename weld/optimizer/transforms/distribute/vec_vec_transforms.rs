@@ -158,7 +158,7 @@ pub fn flatten_final_res(expr: &mut Expr) -> WeldResult<Expr> {
         let new_body = flatten_final_res(body)?;
         Ok(constructors::let_expr(name.clone(), (**value).clone(), new_body)?)
     } else {
-        compile_err!("Invalid expr passed to flatten")
+        compile_err!("Invalid expression passed to flatten")
     }
 }
 
@@ -168,8 +168,13 @@ pub fn flatten_toplevel_func(expr: &mut Expr) -> WeldResult<Expr> {
     print!("in flatten: {}\n", expr.pretty_print_config(&print_conf));
     if let Lambda { ref mut params, ref mut body } = expr.kind {
         println!("got lambda, body {}", body.pretty_print());
-        let new_res = flatten_final_res(body)?;
-        return Ok(constructors::lambda_expr(params.clone(), new_res.clone())?);
+        match (**body).kind {
+            Res { .. } | Let { .. } => {
+                let new_res = flatten_final_res(body)?;
+                return Ok(constructors::lambda_expr(params.clone(), new_res.clone())?);
+            }
+            _ => {}
+        };
     }
 
     return Ok(expr.clone())
