@@ -1,3 +1,4 @@
+
 //! Utility functions for moving between operations on vec[T] and vec[vec[T]].
 //! Used in the `distribute` transform for operations on shards.
 
@@ -151,14 +152,13 @@ pub fn flatten_vec(expr: &mut Expr) -> WeldResult<Expr> {
 
 pub fn flatten_final_res(expr: &mut Expr) -> WeldResult<Expr> {
     if let Res { ref builder } = expr.kind {
-        println!("got res");
         let new_res = flatten_vec(&mut (expr).clone())?;
         Ok(new_res)
     } else if let Let { ref name, ref value, ref mut body } = expr.kind {
         let new_body = flatten_final_res(body)?;
         Ok(constructors::let_expr(name.clone(), (**value).clone(), new_body)?)
     } else {
-        compile_err!("Invalid expression passed to flatten")
+        Ok(expr.clone())
     }
 }
 
