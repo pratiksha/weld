@@ -10,6 +10,19 @@ use ast::constructors;
 use optimizer::transforms::distribute::distribute::SHARDED_ANNOTATION;
 use optimizer::transforms::distribute::code_util;
 
+const PREFETCH_DICT_SYM: &str = "prefetch_dict";
+const PREFETCH_I32_SYM: &str = "prefetch_i32";
+const PREFETCH_F64_SYM: &str = "prefetch_f64";
+const PREFETCH_DOUBLE_SYM: &str = "prefetch_double";
+
+/// For mergers, vecmergers, appenders that are aggregated on master, prefetch the result in parallel first
+/// by calling out to prefetch UDF.
+pub fn gen_prefetch(result: &Expr, result_ty: Type,
+                    builder: &Expr) {
+    
+
+}
+
 /// Merge a vector of shards into a vec[vec[T]]. In order to do this, the builder is modified to build
 /// a vector of the original vectors.
 pub fn gen_merge_appender(result_iter: &Iter, result_ty: Type,
@@ -45,7 +58,28 @@ pub fn gen_merge_appender(result_iter: &Iter, result_ty: Type,
 
 /// Merge the results of distributed merger computations into a single result.
 pub fn gen_merge_merger(result_iter: &Iter, result_ty: Type,
+                        result_ident: &Expr,
                         builder: &Expr) -> WeldResult<Expr> {
+    // Prefetch data using a UDF.
+    let prefetch_expr = if let Vector(ref ty) = result_ident.ty {
+        match **ty {
+            Scalar(ScalarKind::I32) => {
+                constructors::cudf_expr(PREFETCH_I32_SYM.to_string(),
+                                        vec![result_ident.clone()],
+                                        Scalar(ScalarKind::I32)); // no return value here
+            },
+            Scalar(ScalarKind::F64) => {
+                constructors::cudf_expr(PREFETCH_F64_SYM.to_string(),
+                                        vec![result_ident.clone()],
+                                        Scalar(ScalarKind::I32)); // no return value here
+            },
+            _ => unimplemented!()
+        }
+    } else {
+        // prefetch not implemented for this type
+        unimplemented!()
+    };
+    
     // Create the loop.
     let params = code_util::new_loop_params(&builder.ty, &result_ty, builder);
     let merge_expr = code_util::simple_merge_expr(&params[0], &params[2]);

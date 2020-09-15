@@ -195,20 +195,25 @@ pub fn gen_distributed_loop(e: &mut Expr,
         //print!("dispatch loop result\n");
         // let results = constructors::result_expr(dispatch_loop)?;
         let results = dispatch_loop;
+
+        let (result_sym, result_ident) = code_util::new_sym_and_ident("result",
+                                                                      &(results.ty),
+                                                                      &e);
+        //let result_let = constructors::let_expr(result_sym, results,  )
         
         //print!("generating loop\n");
         /* Finally, merge result of dispatch. */
-        let result_iter = code_util::simple_iter(results);
+        let result_iter = code_util::simple_iter(result_ident.clone());
 
         let merge_loop: Expr = if let Builder(ref bk, _) = builder.ty {
             match bk {
                 BuilderKind::Appender(..) => {
                     //print!("merge appender\n");
                     gen_merge_appender(&result_iter, subprog_body.ty, builder).unwrap()
-                },
+                }, 
                 BuilderKind::Merger(..) => {
                     //print!("merge merger\n");
-                    gen_merge_merger(&result_iter, subprog_body.ty, builder).unwrap()
+                    gen_merge_merger(&result_iter, subprog_body.ty, &result_ident, builder).unwrap()
                 },
                 BuilderKind::DictMerger(..) => {
                     print!("merge dictionary\n");
