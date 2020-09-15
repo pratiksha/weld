@@ -66,12 +66,12 @@ pub fn gen_merge_merger(result_iter: &Iter, result_ty: Type,
             Scalar(ScalarKind::I32) => {
                 constructors::cudf_expr(PREFETCH_I32_SYM.to_string(),
                                         vec![result_ident.clone()],
-                                        Scalar(ScalarKind::I32)); // no return value here
+                                        Scalar(ScalarKind::I32))? // no return value here
             },
             Scalar(ScalarKind::F64) => {
                 constructors::cudf_expr(PREFETCH_F64_SYM.to_string(),
                                         vec![result_ident.clone()],
-                                        Scalar(ScalarKind::I32)); // no return value here
+                                        Scalar(ScalarKind::I32))? // no return value here
             },
             _ => unimplemented!()
         }
@@ -79,6 +79,10 @@ pub fn gen_merge_merger(result_iter: &Iter, result_ty: Type,
         // prefetch not implemented for this type
         unimplemented!()
     };
+
+    let (prefetch_sym, prefetch_ident) = code_util::new_sym_and_ident("prefetch",
+                                                                      &Scalar(ScalarKind::I32),
+                                                                      &result_ident);
     
     // Create the loop.
     let params = code_util::new_loop_params(&builder.ty, &result_ty, builder);
@@ -87,8 +91,11 @@ pub fn gen_merge_merger(result_iter: &Iter, result_ty: Type,
     
     let loop_expr = constructors::for_expr(vec![result_iter.clone()],
                                     builder.clone(),
-                                    merge_func, false).unwrap();
-    Ok(loop_expr)
+                                           merge_func, false).unwrap();
+
+    let loop_let = constructors::let_expr(prefetch_sym, prefetch_expr, loop_expr)?;
+
+    Ok(loop_let)
 }
 
 /// Merge a vector of locally computed vecmerger.
