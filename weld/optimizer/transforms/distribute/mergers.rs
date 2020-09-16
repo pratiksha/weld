@@ -12,6 +12,7 @@ use optimizer::transforms::distribute::code_util;
 
 const PREFETCH_DICT_SYM: &str = "prefetch_dict";
 const PREFETCH_I32_SYM: &str = "prefetch_i32";
+const PREFETCH_I64_SYM: &str = "prefetch_i64";
 const PREFETCH_F64_SYM: &str = "prefetch_f64";
 const PREFETCH_DOUBLE_SYM: &str = "prefetch_double";
 
@@ -68,6 +69,11 @@ pub fn gen_merge_merger(result_iter: &Iter, result_ty: Type,
                                         vec![result_ident.clone()],
                                         Scalar(ScalarKind::I32))? // no return value here
             },
+            Scalar(ScalarKind::I64) => {
+                constructors::cudf_expr(PREFETCH_I64_SYM.to_string(),
+                                        vec![result_ident.clone()],
+                                        Scalar(ScalarKind::I32))? // no return value here
+            },
             Scalar(ScalarKind::F64) => {
                 constructors::cudf_expr(PREFETCH_F64_SYM.to_string(),
                                         vec![result_ident.clone()],
@@ -86,11 +92,12 @@ pub fn gen_merge_merger(result_iter: &Iter, result_ty: Type,
     
     // Create the loop.
     let params = code_util::new_loop_params(&builder.ty, &result_ty, builder);
-    let merge_expr = code_util::simple_merge_expr(&params[0], &params[2]);
+
+    let merge_expr = code_util::simple_merge_expr(&params[0], &params[2]); 
     let merge_func = constructors::lambda_expr(params, merge_expr).unwrap();
     
     let loop_expr = constructors::for_expr(vec![result_iter.clone()],
-                                    builder.clone(),
+                                           builder.clone(),
                                            merge_func, false).unwrap();
 
     let loop_let = constructors::let_expr(prefetch_sym, prefetch_expr, loop_expr)?;

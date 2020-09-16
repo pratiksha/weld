@@ -196,7 +196,7 @@ pub fn gen_distributed_loop(e: &mut Expr,
         // let results = constructors::result_expr(dispatch_loop)?;
         let results = dispatch_loop;
 
-        let (result_sym, result_ident) = code_util::new_sym_and_ident("result",
+        let (result_sym, result_ident) = code_util::new_sym_and_ident("loop_result",
                                                                       &(results.ty),
                                                                       &e);
         //let result_let = constructors::let_expr(result_sym, results,  )
@@ -233,8 +233,9 @@ pub fn gen_distributed_loop(e: &mut Expr,
         };
         
         //print!("returning loop... {}\n", merge_loop.pretty_print());
-
-        return Ok(Some(merge_loop));
+        let merge_with_let = constructors::let_expr(result_sym, results, merge_loop)?;
+        
+        return Ok(Some(merge_with_let));
     } else { // abort
         print!("Not distributing: not a For\n");
         return Ok(None);
