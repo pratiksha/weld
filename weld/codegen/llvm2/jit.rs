@@ -307,15 +307,17 @@ unsafe fn create_exec_engine(module: LLVMModuleRef,
                              conf: &ParsedConf) -> WeldResult<LLVMExecutionEngineRef> {
     let mut engine = mem::uninitialized();
     let mut error_str = mem::uninitialized();
-    let mut options: LLVMMCJITCompilerOptions = mem::uninitialized();
+    //let mut options: LLVMMCJITCompilerOptions = mem::uninitialized();
+    let mut options = mem::MaybeUninit::uninit();
     let options_size = mem::size_of::<LLVMMCJITCompilerOptions>();
-    LLVMInitializeMCJITCompilerOptions(&mut options, options_size);
-    options.OptLevel = conf.llvm.opt_level;
-    options.CodeModel = LLVMCodeModel::LLVMCodeModelDefault;
+    LLVMInitializeMCJITCompilerOptions(options.as_mut_ptr(), options_size);
+    options.assume_init();
+    (*(options.as_mut_ptr())).OptLevel = conf.llvm.opt_level;
+    (*(options.as_mut_ptr())).CodeModel = LLVMCodeModel::LLVMCodeModelDefault;
 
     let result_code = LLVMCreateMCJITCompilerForModule(&mut engine,
                                                        module,
-                                                       &mut options,
+                                                       options.as_mut_ptr(),
                                                        options_size,
                                                        &mut error_str);
     if result_code != 0 {
